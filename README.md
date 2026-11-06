@@ -14,6 +14,8 @@ Puis ouvrir http://localhost:8765.
 
 Publier le dossier tel quel sur un hébergement statique en HTTPS : la géolocalisation et l'installation sur téléphone l'exigent.
 
+À chaque publication, changer le numéro dans `version.json` : c'est lui qui déclenche le rechargement de l'appli sur les téléphones déjà ouverts, et il s'affiche dans les réglages.
+
 ## Organisation
 
 - `js/places.js` : recherche, classement par thème et tri des lieux et des personnes

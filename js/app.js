@@ -463,6 +463,7 @@ function renderSettings() {
     ${radioGroup('rate', 'Vitesse de la voix', [[0.8, '0,8×'], [1, '1×'], [1.25, '1,25×'], [1.5, '1,5×']], s.rate)}
     ${speechSupported() ? langs.map(voiceField).join('') : '<p class="notice">La synthèse vocale n\'est pas disponible sur ce navigateur.</p>'}
     ${radioGroup('theme', 'Apparence', [['auto', 'Automatique'], ['light', 'Clair'], ['dark', 'Sombre']], s.theme)}
+    <p class="legal">Version ${esc(loadedVersion ?? 'inconnue')}</p>
     <p class="legal">Votre position sert uniquement à chercher les lieux proches auprès de Wikipédia. Votre historique et vos favoris restent sur cet appareil.</p>
     <div class="page-done"><a class="key key-wide" id="see-places" href="#/">${esc(seePlacesLabel())}</a></div>
   </div>`;
@@ -666,9 +667,34 @@ document.addEventListener('change', (event) => {
 
 onVoicesReady(() => { if (currentRoute === '#/reglages') renderSettings(); });
 
+/* ---------- Mises à jour ---------- */
+
+// Sur mobile, revenir dans l'appli ne recharge pas la page : une nouvelle publication passerait inaperçue.
+let loadedVersion = null;
+
+async function publishedVersion() {
+  try {
+    const res = await fetch('version.json', { cache: 'no-cache' });
+    return res.ok ? (await res.json()).version : null;
+  } catch {
+    return null;
+  }
+}
+
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible') return;
+  const latest = await publishedVersion();
+  const listening = narrator?.state === 'playing';
+  if (latest && loadedVersion && latest !== loadedVersion && !listening) location.reload();
+});
+
 /* ---------- Démarrage ---------- */
 
 applyTheme();
+publishedVersion().then((version) => {
+  loadedVersion = version;
+  if (currentRoute === '#/reglages') renderSettings();
+});
 addEventListener('hashchange', route);
 route();
 locate();
