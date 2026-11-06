@@ -694,6 +694,7 @@ onVoicesReady(() => { if (currentRoute === '#/reglages') renderSettings(); });
 
 // Sur mobile, revenir dans l'appli ne recharge pas la page : une nouvelle publication passerait inaperçue.
 let loadedVersion = null;
+const APP_FILES = ['index.html', 'css/styles.css', 'js/app.js', 'js/api.js', 'js/article.js', 'js/places.js', 'js/speech.js', 'js/store.js', 'data/types.json'];
 
 async function publishedVersion() {
   try {
@@ -708,7 +709,11 @@ document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState !== 'visible') return;
   const latest = await publishedVersion();
   const listening = narrator?.state === 'playing';
-  if (latest && loadedVersion && latest !== loadedVersion && !listening) location.reload();
+  if (latest && loadedVersion && latest !== loadedVersion && !listening) {
+    // Sans ce rafraîchissement préalable, le rechargement peut encore exécuter l'ancien code.
+    await Promise.allSettled(APP_FILES.map((file) => fetch(file, { cache: 'no-cache' })));
+    location.reload();
+  }
 });
 
 /* ---------- Démarrage ---------- */
