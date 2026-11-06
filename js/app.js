@@ -1,4 +1,4 @@
-import { THEMES, VIEW_GROUPS, discoverPlaces, discoverPeople, closestInteresting, distanceKm, enrich, inTheme, isCity, loadViews, searchArticles } from './places.js';
+import { THEMES, VIEW_GROUPS, RADII_KM, discoverWithWidening, discoverPeople, closestInteresting, distanceKm, enrich, inTheme, isCity, loadViews, searchArticles } from './places.js';
 import { loadArticle, narrationChunks, wikiRoute } from './article.js';
 import { Narrator, speechSupported, voicesFor, preferredVoice, speakSample, onVoicesReady } from './speech.js';
 import { articleUrl } from './api.js';
@@ -13,6 +13,7 @@ const state = {
   status: 'idle', // idle | locating | loading | ready | denied | error
   step: '',
   area: null,
+  usedRadiusKm: null,
   people: null,
   tab: 'histoire',
   sort: 'views', // views | near
@@ -64,16 +65,17 @@ export async function setCenter(center) {
   state.step = 'Connexion à Wikipédia';
   renderIfHome();
   try {
-    const area = await discoverPlaces(center, store.settings().radiusKm, (step) => { state.step = step; renderIfHome(); });
+    const { area, radiusKm } = await discoverWithWidening(center, store.settings().radiusKm, (step) => { state.step = step; renderIfHome(); });
     if (requestId !== state.requestId) return;
     state.area = area;
+    state.usedRadiusKm = radiusKm;
     const hero = closestInteresting(area.places, center);
     if (hero) await enrich([hero], 640).catch(() => {});
     await enrich(area.places.slice(0, 50)).catch(() => {});
     if (requestId !== state.requestId) return;
     state.status = 'ready';
     renderIfHome();
-    const areaKey = `${center.lat.toFixed(3)},${center.lon.toFixed(3)},${store.settings().radiusKm}`;
+    const areaKey = `${center.lat.toFixed(3)},${center.lon.toFixed(3)},${radiusKm}`;
     // Consultations et personnalités arrivent après : elles ne doivent pas retarder les lieux.
     loadViews(area.places, area.local, `views:${areaKey}`)
       .catch(() => false)
@@ -130,19 +132,21 @@ function itemCard(item) {
 function currentPlace() {
   const { center, area } = state;
   if (center?.title) return { lang: center.lang, title: center.title, label: center.label, lat: center.lat, lon: center.lon };
-  const main = area?.settlements?.find((s) => s.name === area.placeName);
+  const main = area?.mainPlace;
   return main ? { lang: 'fr', title: main.name, label: main.name, lat: main.lat, lon: main.lon } : null;
 }
 
 function statusLine() {
   const { center, area } = state;
   if (!center) return '';
-  const radius = store.settings().radiusKm;
+  const chosen = store.settings().radiusKm;
+  const radius = (area && state.usedRadiusKm) || chosen;
+  const widened = radius !== chosen ? ' <span class="widened">(élargi automatiquement)</span>' : '';
   const place = center.label ?? area?.placeName ?? 'votre position';
   const article = center.title ? `<a href="${esc(wikiRoute(center.lang, center.title))}">Lire l'article</a>` : '';
   const addToTrip = currentPlace() ? '<button class="linkish" data-action="trip-sheet" type="button">Ajouter à un voyage</button>' : '';
   const back = center.source === 'manual' ? `${article} <button class="linkish" data-action="use-gps" type="button">Revenir à ma position</button>` : '';
-  return `<p class="status"><span class="dot" aria-hidden="true"></span>Autour de <strong>${esc(place)}</strong> · <a href="#/reglages">${radius} km</a> ${addToTrip} ${back}</p>`;
+  return `<p class="status"><span class="dot" aria-hidden="true"></span>Autour de <strong>${esc(place)}</strong> · <a href="#/reglages">${radius} km</a>${widened} ${addToTrip} ${back}</p>`;
 }
 
 function loadingScreen(message) {
@@ -260,8 +264,8 @@ function renderHome() {
   } else if (!state.area.places.length) {
     view.innerHTML = `${statusLine()}<div class="screen-msg">
       <h1 class="pixel">RIEN ICI</h1>
-      <p>Wikipédia ne recense aucun lieu marquant dans ce rayon.</p>
-      <a class="key" href="#/reglages">ÉLARGIR LE RAYON</a>
+      <p>Wikipédia ne recense aucun lieu marquant, même à ${state.usedRadiusKm} km.</p>
+      <a class="key" href="#/reglages">RÉGLAGES</a>
     </div>`;
   } else {
     view.innerHTML = `<div class="home">${statusLine()}${heroBlock()}${themeList()}</div>`;
@@ -482,7 +486,7 @@ function renderSettings() {
   const langs = [...new Set(['fr', state.area?.local].filter(Boolean))];
   view.innerHTML = `<div class="page page-narrow">${backKey}<h1 class="pixel">RÉGLAGES</h1>
     <p class="settings-note">Vos choix sont enregistrés automatiquement.</p>
-    ${radioGroup('radius', 'Périmètre de recherche', [[1, '1 km'], [2, '2 km'], [5, '5 km'], [10, '10 km']], s.radiusKm)}
+    ${radioGroup('radius', 'Périmètre de recherche', RADII_KM.map((km) => [km, `${km} km`]), s.radiusKm)}
     ${radioGroup('rate', 'Vitesse de la voix', [[0.8, '0,8×'], [1, '1×'], [1.25, '1,25×'], [1.5, '1,5×']], s.rate)}
     ${speechSupported() ? langs.map(voiceField).join('') : '<p class="notice">La synthèse vocale n\'est pas disponible sur ce navigateur.</p>'}
     ${radioGroup('theme', 'Apparence', [['auto', 'Automatique'], ['light', 'Clair'], ['dark', 'Sombre']], s.theme)}

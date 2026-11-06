@@ -12,6 +12,9 @@ export const THEMES = [
 ];
 
 const GEO_LIMIT = 200;
+const GEOSEARCH_MAX_KM = 10;
+export const RADII_KM = [1, 2, 5, 10, 50];
+const MIN_PLACES = 8;
 const HERITAGE_BONUS = 1.5;
 const NON_ARTICLE_SITES = new Set(['commonswiki', 'metawiki', 'specieswiki', 'wikidatawiki', 'mediawikiwiki', 'sourceswiki', 'incubatorwiki']);
 
@@ -42,14 +45,38 @@ const claimIds = (entity, property) => (entity.claims?.[property] ?? [])
 const wikiLinks = (entity) => Object.keys(entity.sitelinks ?? {})
   .filter((site) => site.endsWith('wiki') && !NON_ARTICLE_SITES.has(site)).length;
 
+// GeoSearch plafonne à 10 km. Au-delà, la recherche plein texte couvre le rayon
+// et renvoie d'abord les articles les plus liés, ce qui garde les lieux marquants.
+function nearbyGenerator(center, radiusKm) {
+  if (radiusKm <= GEOSEARCH_MAX_KM) {
+    return {
+      generator: 'geosearch', ggscoord: `${center.lat}|${center.lon}`,
+      ggsradius: Math.round(radiusKm * 1000), ggslimit: GEO_LIMIT,
+    };
+  }
+  return {
+    generator: 'search', gsrsearch: `nearcoord:${radiusKm}km,${center.lat},${center.lon}`,
+    gsrlimit: GEO_LIMIT, gsrnamespace: 0, gsrsort: 'incoming_links_desc',
+  };
+}
+
+// Sur un grand rayon, les articles très liés d'une métropole évinceraient les lieux tout proches :
+// on ajoute donc toujours la recherche de proximité.
 async function geosearch(lang, center, radiusKm) {
+  const near = await pagesAround(lang, center, Math.min(radiusKm, GEOSEARCH_MAX_KM));
+  if (radiusKm <= GEOSEARCH_MAX_KM) return near;
+  const known = new Set(near.map((p) => p.qid));
+  const wide = await pagesAround(lang, center, radiusKm);
+  return [...near, ...wide.filter((p) => !known.has(p.qid))];
+}
+
+async function pagesAround(lang, center, radiusKm) {
   const pages = [];
   let cont = {};
   // Les propriétés d'une même requête peuvent arriver sur plusieurs réponses.
   for (let round = 0; round < 4 && cont; round++) {
     const data = await wikipedia(lang, {
-      action: 'query', generator: 'geosearch', ggscoord: `${center.lat}|${center.lon}`,
-      ggsradius: Math.round(radiusKm * 1000), ggslimit: GEO_LIMIT,
+      action: 'query', ...nearbyGenerator(center, radiusKm),
       prop: 'coordinates|pageprops|info', ppprop: 'wikibase_item', colimit: 'max', ...cont,
     });
     for (const page of data?.query?.pages ?? []) {
@@ -57,7 +84,8 @@ async function geosearch(lang, center, radiusKm) {
       if (known) Object.assign(known, page);
       else pages.push(page);
     }
-    cont = data?.continue ?? null;
+    // `gsroffset` demanderait la page de résultats suivante, pas la suite de celle-ci.
+    cont = data?.continue?.gsroffset === undefined ? data?.continue ?? null : null;
   }
   return pages
     .filter((p) => p.pageprops?.wikibase_item && p.coordinates?.[0])
@@ -236,15 +264,33 @@ export async function discoverPlaces(center, radiusKm, onStep = () => {}) {
   }
   places.sort((a, b) => b.score - a.score);
 
+  // Une grande ville du rayon ne doit pas donner son nom à un coin isolé : sans commune toute proche, on prend la plus proche.
   const nearby = settlements.filter((s) => distanceKm(center, s) <= 3);
-  const main = (nearby.length ? nearby : settlements).sort((a, b) => b.links - a.links)[0];
+  const main = nearby.length
+    ? [...nearby].sort((a, b) => b.links - a.links)[0]
+    : [...settlements].sort((a, b) => distanceKm(center, a) - distanceKm(center, b))[0];
   const value = {
     places, local, placeName: main ? cleanName(main.title) : null,
+    mainPlace: main ? { name: cleanName(main.title), lat: main.lat, lon: main.lon } : null,
     settlements: settlements.sort((a, b) => b.links - a.links).slice(0, 4)
       .map(({ qid, title, lat, lon }) => ({ qid, name: cleanName(title), lat, lon })),
   };
   writeArea(key, value);
   return value;
+}
+
+// Élargit le rayon tant qu'il y a trop peu de lieux à proposer. Renvoie le rayon réellement utilisé.
+export async function discoverWithWidening(center, radiusKm, onStep) {
+  const ladder = [radiusKm, ...RADII_KM.filter((r) => r > radiusKm)];
+  let area;
+  let used = radiusKm;
+  for (const radius of ladder) {
+    used = radius;
+    if (radius !== radiusKm) onStep(`Peu de lieux ici : recherche à ${radius} km`);
+    area = await discoverPlaces(center, radius, radius === radiusKm ? onStep : () => {});
+    if (area.places.length >= MIN_PLACES) break;
+  }
+  return { area, radiusKm: used };
 }
 
 // Le lieu intéressant le plus proche : le plus proche parmi la meilleure moitié du classement.
