@@ -8,7 +8,7 @@ const defaults = () => ({
   favorites: [],
   trips: [],
   progress: {},
-  settings: { radiusKm: 5, rate: 1.25, voices: {}, theme: 'auto', defaultRateMigrated: true },
+  settings: { radiusKm: 5, rate: 1, voices: {}, theme: 'auto', rateResetToNormal: true },
 });
 
 function load() {
@@ -16,9 +16,9 @@ function load() {
     const saved = JSON.parse(localStorage.getItem(KEY));
     const base = defaults();
     if (!saved) return base;
-    // L'ancienne vitesse par défaut était enregistrée comme un choix : on la remplace une seule fois.
-    if (!saved.settings?.defaultRateMigrated && saved.settings?.rate === 1) delete saved.settings.rate;
-    return { ...base, ...saved, settings: { ...base.settings, ...saved.settings, defaultRateMigrated: true } };
+    // L'ancienne vitesse par défaut (1,25×) était enregistrée comme un choix : on la remplace une seule fois.
+    if (!saved.settings?.rateResetToNormal && saved.settings?.rate === 1.25) delete saved.settings.rate;
+    return { ...base, ...saved, settings: { ...base.settings, ...saved.settings, rateResetToNormal: true } };
   } catch {
     return defaults();
   }
