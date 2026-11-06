@@ -6,6 +6,7 @@ const HISTORY_LIMIT = 200;
 const defaults = () => ({
   history: [],
   favorites: [],
+  trips: [],
   progress: {},
   settings: { radiusKm: 5, rate: 1.25, voices: {}, theme: 'auto', defaultRateMigrated: true },
 });
@@ -66,6 +67,49 @@ export function toggleFavorite(article) {
   data.favorites = exists ? data.favorites.filter((f) => f.id !== item.id) : [item, ...data.favorites];
   save();
   return !exists;
+}
+
+const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+const touch = (trip) => { trip.updatedAt = Date.now(); save(); };
+
+export const trips = () => data.trips;
+export const trip = (id) => data.trips.find((t) => t.id === id);
+
+export function createTrip(name) {
+  const created = { id: newId(), name, cities: [], createdAt: Date.now(), updatedAt: Date.now() };
+  data.trips = [created, ...data.trips];
+  save();
+  return created;
+}
+
+export function deleteTrip(id) {
+  data.trips = data.trips.filter((t) => t.id !== id);
+  save();
+}
+
+// Renvoie false si la ville fait déjà partie du voyage.
+export function addCity(tripId, { lang, title, label, lat, lon }) {
+  const target = trip(tripId);
+  const id = articleId(lang, title);
+  if (target.cities.some((c) => c.id === id)) return false;
+  target.cities.push({ id, lang, title, label, lat, lon, at: Date.now() });
+  touch(target);
+  return true;
+}
+
+export function removeCity(tripId, cityId) {
+  const target = trip(tripId);
+  target.cities = target.cities.filter((c) => c.id !== cityId);
+  touch(target);
+}
+
+export function moveCity(tripId, cityId, offset) {
+  const { cities } = trip(tripId);
+  const from = cities.findIndex((c) => c.id === cityId);
+  const to = from + offset;
+  if (from < 0 || to < 0 || to >= cities.length) return;
+  cities.splice(to, 0, cities.splice(from, 1)[0]);
+  touch(trip(tripId));
 }
 
 export const progress = (id) => data.progress[id];

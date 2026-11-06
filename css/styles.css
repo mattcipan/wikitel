@@ -390,6 +390,28 @@ a { color: var(--link); }
 .play svg { width: 28px; height: 28px; fill: currentColor; }
 .rate { min-width: 56px; height: 44px; border: 2px solid var(--ink); border-radius: 2px; background: var(--surface); color: var(--ink); font: 400 1.375rem/1 var(--pixel); cursor: pointer; }
 
+/* Voyages */
+.inline-field { display: flex; gap: 8px; margin-bottom: 16px; }
+.inline-field input, .trip-search input { flex: 1; min-width: 0; width: 100%; min-height: 44px; padding: 0 10px; border: 2px solid var(--ink); border-radius: 0; background: var(--surface); color: var(--ink); font: 1rem var(--sans); }
+.trips { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.trip-row { display: block; padding: 12px 14px; border: 1px solid var(--line); background: var(--surface); color: inherit; text-decoration: none; }
+.trip-row:hover { border-color: var(--ink); }
+.trip-search { position: relative; margin-bottom: 8px; }
+.trip-results { position: absolute; z-index: 5; left: 0; right: 0; top: 100%; max-height: 50dvh; overflow-y: auto; background: var(--surface); border: 2px solid var(--ink); border-top: 0; }
+.trip-result { display: block; width: 100%; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--line); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.trip-result:hover { background: var(--bg); }
+.stops { margin: 0 0 8px; padding: 0; list-style: none; }
+.stop { display: flex; align-items: center; gap: 2px; padding: 2px 0; border-bottom: 1px solid var(--line); }
+.stop-number { flex: none; width: 1.75rem; color: var(--accent); font: 400 1.5rem/1 var(--pixel); }
+.stop-name { flex: 1; min-width: 0; min-height: 44px; padding: 4px 0; border: 0; background: none; color: inherit; font: 700 1.125rem/1.25 var(--serif); text-align: left; cursor: pointer; }
+.stop-name:hover { text-decoration: underline; }
+.icon-btn:disabled { opacity: 0.25; cursor: default; }
+.danger { display: block; margin-top: 24px; color: var(--c-histoire); }
+.sheet { width: min(30rem, calc(100vw - 32px)); max-height: 85dvh; overflow-y: auto; padding: 20px; border: 2px solid var(--ink); background: var(--bg); color: var(--ink); }
+.sheet::backdrop { background: rgb(0 0 0 / 0.55); }
+.sheet-list { margin-bottom: 16px; border: 1px solid var(--line); background: var(--surface); }
+.sheet .key-wide { margin-bottom: 0; }
+
 /* Réglages */
 .page-keys { margin-bottom: 16px; }
 .settings-note { margin: 0 0 20px; color: var(--muted); font-size: 0.9375rem; }

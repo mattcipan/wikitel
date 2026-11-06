@@ -116,14 +116,23 @@ function itemCard(item) {
   </a></li>`;
 }
 
+// La ville explorée : celle choisie, ou la commune principale autour de la position GPS.
+function currentPlace() {
+  const { center, area } = state;
+  if (center?.title) return { lang: center.lang, title: center.title, label: center.label, lat: center.lat, lon: center.lon };
+  const main = area?.settlements?.find((s) => s.name === area.placeName);
+  return main ? { lang: 'fr', title: main.name, label: main.name, lat: main.lat, lon: main.lon } : null;
+}
+
 function statusLine() {
   const { center, area } = state;
   if (!center) return '';
   const radius = store.settings().radiusKm;
   const place = center.label ?? area?.placeName ?? 'votre position';
   const article = center.title ? `<a href="${esc(wikiRoute(center.lang, center.title))}">Lire l'article</a>` : '';
+  const addToTrip = currentPlace() ? '<button class="linkish" data-action="trip-sheet" type="button">Ajouter à un voyage</button>' : '';
   const back = center.source === 'manual' ? `${article} <button class="linkish" data-action="use-gps" type="button">Revenir à ma position</button>` : '';
-  return `<p class="status"><span class="dot" aria-hidden="true"></span>Autour de <strong>${esc(place)}</strong> · <a href="#/reglages">${radius} km</a> ${back}</p>`;
+  return `<p class="status"><span class="dot" aria-hidden="true"></span>Autour de <strong>${esc(place)}</strong> · <a href="#/reglages">${radius} km</a> ${addToTrip} ${back}</p>`;
 }
 
 function loadingScreen(message) {
@@ -473,6 +482,111 @@ function renderSettings() {
   </div>`;
 }
 
+/* ---------- Voyages ---------- */
+
+function plural(count, word) {
+  return `${count} ${word}${count > 1 ? 's' : ''}`;
+}
+
+function renderTrips() {
+  document.title = 'Voyages · Wikitel';
+  const trips = store.trips();
+  view.innerHTML = `<div class="page page-narrow">${backKey}<h1 class="pixel">VOYAGES</h1>
+    <div class="inline-field">
+      <input id="new-trip-name" type="text" maxlength="60" placeholder="Nom du voyage, par exemple Italie 2027" aria-label="Nom du nouveau voyage" autocomplete="off" enterkeyhint="done">
+      <button class="key" type="button" data-action="trip-create">CRÉER</button>
+    </div>
+    ${trips.length ? `<ul class="trips">${trips.map((t) => `<li><a class="trip-row" href="#/voyages/${esc(t.id)}">
+      <span class="card-title">${esc(t.name)}</span>
+      <span class="card-meta">${esc(plural(t.cities.length, 'ville'))}</span></a></li>`).join('')}</ul>`
+    : '<p class="empty">Créez un voyage, puis ajoutez-y les villes de votre itinéraire.</p>'}</div>`;
+}
+
+// Google Maps accepte au plus 9 étapes intermédiaires en plus du départ et de l'arrivée.
+function routeUrl(cities) {
+  const point = (c) => `${c.lat},${c.lon}`;
+  const stops = cities.slice(0, 11);
+  const params = new URLSearchParams({ api: '1', origin: point(stops[0]), destination: point(stops[stops.length - 1]) });
+  if (stops.length > 2) params.set('waypoints', stops.slice(1, -1).map(point).join('|'));
+  return `https://www.google.com/maps/dir/?${params}`;
+}
+
+function renderTrip(id) {
+  const trip = store.trip(id);
+  if (!trip) {
+    view.innerHTML = '<div class="screen-msg"><h1 class="pixel">VOYAGE INTROUVABLE</h1><p>Il a peut-être été supprimé.</p><a class="key" href="#/voyages">VOYAGES</a></div>';
+    return;
+  }
+  document.title = `${trip.name} · Wikitel`;
+  const last = trip.cities.length - 1;
+  const rows = trip.cities.map((city, index) => `<li class="stop">
+      <span class="stop-number" aria-hidden="true">${index + 1}</span>
+      <button class="stop-name" type="button" data-action="trip-explore" data-city="${esc(city.id)}">${esc(city.label)}</button>
+      <button class="icon-btn" type="button" data-action="trip-move" data-city="${esc(city.id)}" data-offset="-1" aria-label="Monter ${esc(city.label)}" ${index === 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 7 7 8H5z"/></svg></button>
+      <button class="icon-btn" type="button" data-action="trip-move" data-city="${esc(city.id)}" data-offset="1" aria-label="Descendre ${esc(city.label)}" ${index === last ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 17-7-8h14z"/></svg></button>
+      <button class="icon-btn" type="button" data-action="trip-remove" data-city="${esc(city.id)}" aria-label="Retirer ${esc(city.label)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4z"/></svg></button>
+    </li>`).join('');
+  const tooMany = trip.cities.length > 11 ? '<p class="legal">Google Maps limite l\'itinéraire aux 11 premières villes.</p>' : '';
+  view.innerHTML = `<div class="page page-narrow" data-trip="${esc(trip.id)}">
+    <div class="page-keys"><a class="key key-quiet" href="#/voyages">VOYAGES</a></div>
+    <h1 class="pixel">${esc(trip.name.toUpperCase())}</h1>
+    <div class="trip-search">
+      <input id="trip-search-input" type="search" placeholder="Ajouter une ville…" aria-label="Rechercher une ville à ajouter" autocomplete="off" enterkeyhint="search">
+      <div class="trip-results" id="trip-search-results" hidden></div>
+    </div>
+    <p class="views-note" id="trip-message" role="status"></p>
+    ${rows ? `<ol class="stops">${rows}</ol>` : '<p class="empty">Aucune ville pour le moment. Cherchez-en une ci-dessus, ou utilisez « Ajouter à un voyage » depuis la page d\'une ville.</p>'}
+    ${trip.cities.length > 1 ? `<a class="key key-wide" target="_blank" rel="noopener noreferrer" href="${esc(routeUrl(trip.cities))}">VOIR L'ITINÉRAIRE</a>${tooMany}` : ''}
+    <button class="linkish danger" type="button" data-action="trip-delete">Supprimer ce voyage</button>
+  </div>`;
+}
+
+let tripSearchTimer;
+let tripSearchToken = 0;
+let tripResults = [];
+
+async function runTripSearch(query) {
+  const token = ++tripSearchToken;
+  const box = document.getElementById('trip-search-results');
+  if (query.trim().length < 2) { box.hidden = true; return; }
+  const results = (await searchArticles(query.trim(), state.area?.local)).filter((r) => r.lat !== undefined && r.qid);
+  if (token !== tripSearchToken || !box.isConnected) return;
+  tripResults = results;
+  box.hidden = false;
+  box.innerHTML = results.length
+    ? results.map((r, i) => `<button class="trip-result" type="button" data-action="trip-add-result" data-index="${i}">
+        <span class="result-title">${esc(r.title)}</span>${r.description ? `<span class="result-desc">${esc(r.description)}</span>` : ''}</button>`).join('')
+    : '<p class="result-none">Aucun lieu trouvé.</p>';
+}
+
+const tripSheet = document.getElementById('trip-sheet');
+
+function renderTripSheet(message = '') {
+  const place = currentPlace();
+  const trips = store.trips();
+  tripSheet.innerHTML = `<h2 class="pixel">AJOUTER ${esc(place.label.toUpperCase())}</h2>
+    ${message ? `<p class="notice" role="status">${message}</p>` : ''}
+    ${trips.length ? `<div class="sheet-list">${trips.map((t) => `<button class="trip-result" type="button" data-action="trip-add-current" data-trip="${esc(t.id)}">
+      <span class="result-title">${esc(t.name)}</span><span class="result-desc">${esc(plural(t.cities.length, 'ville'))}</span></button>`).join('')}</div>` : ''}
+    <div class="inline-field">
+      <input id="sheet-trip-name" type="text" maxlength="60" placeholder="Nouveau voyage" aria-label="Nom du nouveau voyage" autocomplete="off" enterkeyhint="done">
+      <button class="key" type="button" data-action="trip-create-add">CRÉER</button>
+    </div>
+    <button class="key key-quiet key-wide" type="button" data-action="trip-sheet-close">FERMER</button>`;
+}
+
+function addedMessage(tripId, added) {
+  const trip = store.trip(tripId);
+  const name = esc(trip.name);
+  return `${added ? 'Ajouté à' : 'Déjà dans'} <a href="#/voyages/${esc(tripId)}">${name}</a>.`;
+}
+
+function createTripFrom(input) {
+  const name = input?.value.trim();
+  if (!name) { input?.focus(); return null; }
+  return store.createTrip(name);
+}
+
 function renderAccount() {
   document.title = 'Mon compte · Wikitel';
   view.innerHTML = `<div class="page page-narrow">${backKey}<h1 class="pixel">MON COMPTE</h1>
@@ -508,6 +622,7 @@ function route() {
   currentArticle = null;
   closeSearch();
   menu.close();
+  document.getElementById('trip-sheet').close();
   const hash = location.hash || '#/';
   currentRoute = hash;
   const article = hash.match(/^#\/wiki\/([a-z-]+)\/(.+)$/);
@@ -518,6 +633,8 @@ function route() {
     if (hash === '#/hasard') openRandom();
     else if (hash === '#/historique') renderStoredList('Historique', store.history(), 'Les articles que vous ouvrez apparaîtront ici.', '<button class="key key-quiet key-wide" type="button" data-action="clear-history">EFFACER L\'HISTORIQUE</button>');
     else if (hash === '#/favoris') renderStoredList('Favoris', store.favorites(), 'Ajoutez un article à vos favoris pour le retrouver ici.');
+    else if (hash === '#/voyages') renderTrips();
+    else if (hash.startsWith('#/voyages/')) renderTrip(hash.slice('#/voyages/'.length));
     else if (hash === '#/reglages') renderSettings();
     else if (hash === '#/compte') renderAccount();
     else if (hash === '#/') renderHome();
@@ -642,6 +759,56 @@ const actions = {
     speakSample(VOICE_SAMPLES[lang], lang, { rate: store.settings().rate, voiceUri: store.settings().voices[lang] });
   },
   'reload-route'() { route(); },
+  'trip-create'() {
+    const created = createTripFrom(document.getElementById('new-trip-name'));
+    if (created) location.hash = `#/voyages/${created.id}`;
+  },
+  'trip-sheet'() { renderTripSheet(); tripSheet.showModal(); },
+  'trip-sheet-close'() { tripSheet.close(); },
+  'trip-add-current'(el) {
+    const added = store.addCity(el.dataset.trip, currentPlace());
+    renderTripSheet(addedMessage(el.dataset.trip, added));
+  },
+  'trip-create-add'() {
+    const created = createTripFrom(document.getElementById('sheet-trip-name'));
+    if (!created) return;
+    store.addCity(created.id, currentPlace());
+    renderTripSheet(addedMessage(created.id, true));
+  },
+  async 'trip-add-result'(el) {
+    const tripId = view.querySelector('[data-trip]').dataset.trip;
+    const result = tripResults[Number(el.dataset.index)];
+    const city = await isCity(result.qid).catch(() => false);
+    if (!city) {
+      document.getElementById('trip-message').textContent = `« ${result.title} » n'est pas reconnu comme une ville.`;
+      return;
+    }
+    const added = store.addCity(tripId, { ...result, label: placeLabel(result.title) });
+    renderTrip(tripId);
+    if (!added) document.getElementById('trip-message').textContent = `${placeLabel(result.title)} fait déjà partie de ce voyage.`;
+    document.getElementById('trip-search-input').focus();
+  },
+  'trip-explore'(el) {
+    const trip = store.trip(view.querySelector('[data-trip]').dataset.trip);
+    const city = trip.cities.find((c) => c.id === el.dataset.city);
+    exploreAt(city.lat, city.lon, city.title, city.lang);
+  },
+  'trip-move'(el) {
+    const tripId = view.querySelector('[data-trip]').dataset.trip;
+    store.moveCity(tripId, el.dataset.city, Number(el.dataset.offset));
+    renderTrip(tripId);
+  },
+  'trip-remove'(el) {
+    const tripId = view.querySelector('[data-trip]').dataset.trip;
+    store.removeCity(tripId, el.dataset.city);
+    renderTrip(tripId);
+  },
+  'trip-delete'() {
+    const tripId = view.querySelector('[data-trip]').dataset.trip;
+    if (!confirm(`Supprimer le voyage « ${store.trip(tripId).name} » ?`)) return;
+    store.deleteTrip(tripId);
+    location.hash = '#/voyages';
+  },
 };
 
 document.addEventListener('click', (event) => {
@@ -667,6 +834,18 @@ function applyTheme() {
   if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.dataset.theme = theme;
 }
+
+document.addEventListener('input', (event) => {
+  if (event.target.id !== 'trip-search-input') return;
+  clearTimeout(tripSearchTimer);
+  tripSearchTimer = setTimeout(() => runTripSearch(event.target.value), 250);
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  if (event.target.id === 'new-trip-name') actions['trip-create']();
+  if (event.target.id === 'sheet-trip-name') actions['trip-create-add']();
+});
 
 document.addEventListener('change', (event) => {
   const { name, value } = event.target;
