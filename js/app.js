@@ -1,4 +1,5 @@
 import { THEMES, VIEW_GROUPS, RADII_KM, discoverWithWidening, discoverPeople, closestInteresting, distanceKm, enrich, inTheme, isCity, loadViews, searchArticles } from './places.js';
+import { loadHikes } from './hikes.js';
 import { loadArticle, narrationChunks, wikiRoute } from './article.js';
 import { Narrator, speechSupported, voicesFor, preferredVoice, speakSample, onVoicesReady } from './speech.js';
 import { articleUrl } from './api.js';
@@ -14,6 +15,7 @@ const state = {
   step: '',
   area: null,
   usedRadiusKm: null,
+  hikes: null, // null | 'loading' | 'failed' | liste
   people: null,
   tab: 'histoire',
   sort: 'views', // views | near
@@ -57,6 +59,7 @@ export async function setCenter(center) {
   state.center = center;
   state.area = null;
   state.people = null;
+  state.hikes = null;
   state.placeViews = 'loading';
   state.peopleViews = 'loading';
   state.shown = PAGE_SIZE;
@@ -153,16 +156,56 @@ function loadingScreen(message) {
   return `<div class="screen-msg" role="status"><p class="pixel">${esc(message)}<span class="cursor" aria-hidden="true"></span></p></div>`;
 }
 
+// Les randonnées ne se chargent qu'à l'ouverture de l'onglet : la requête peut prendre près d'une minute.
+function startHikes() {
+  const requestId = state.requestId;
+  state.hikes = 'loading';
+  loadHikes(state.center)
+    .then((hikes) => { if (requestId === state.requestId) { state.hikes = hikes; renderIfHome(); } })
+    .catch(() => { if (requestId === state.requestId) { state.hikes = 'failed'; renderIfHome(); } });
+}
+
+function hikeCard(hike) {
+  const facts = [formatDistance(hike.lengthKm), hike.loop ? 'boucle' : null, `sentier à ${formatDistance(hike.nearestKm)}`].filter(Boolean).join(' · ');
+  return `<li class="hike">
+    <span class="card-title">${esc(hike.name)}</span>
+    <span class="card-meta">${esc(facts)}</span>
+    <span class="hike-actions">
+      <a class="key key-quiet key-small" target="_blank" rel="noopener noreferrer" href="https://www.openstreetmap.org/relation/${encodeURIComponent(hike.id)}">VOIR LE TRACÉ</a>
+      <a class="key key-quiet key-small" target="_blank" rel="noopener noreferrer" href="https://www.google.com/maps/dir/?api=1&amp;destination=${hike.lat},${hike.lon}">Y ALLER</a>
+    </span>
+  </li>`;
+}
+
+function hikesPanel() {
+  if (state.hikes === null) startHikes();
+  if (state.hikes === 'loading') {
+    return `${loadingScreen('Recherche des randonnées')}<p class="views-note hike-wait">Cela peut prendre jusqu'à une minute.</p>`;
+  }
+  if (state.hikes === 'failed') {
+    return `<div class="screen-msg"><p>Le service de randonnées ne répond pas pour le moment.</p>
+      <button class="key" type="button" data-action="hikes-retry">RÉESSAYER</button></div>`;
+  }
+  if (!state.hikes.length) return '<p class="empty">Aucune randonnée balisée trouvée à moins de 30 km.</p>';
+  return `<ul class="cards">${state.hikes.map(hikeCard).join('')}</ul>
+    <p class="legal hike-credit">Données © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">contributeurs OpenStreetMap</a>, licence ODbL. Vérifiez le balisage et les conditions sur place. « Y ALLER » mène au point du sentier le plus proche de la ville, qui n'est pas forcément son départ.</p>`;
+}
+
 function themeList() {
   const { places } = state.area;
   const people = state.people ?? [];
   const tabs = THEMES.map((theme) => {
     const pending = !state.people && (theme.id === 'personnes' || theme.id === 'culture');
-    const count = inTheme(theme.id, places, people).length;
+    const count = theme.id === 'randonnee'
+      ? (Array.isArray(state.hikes) ? state.hikes.length : '')
+      : inTheme(theme.id, places, people).length;
     const selected = state.tab === theme.id;
     return `<button class="tab tab-${theme.id}" role="tab" type="button" aria-selected="${selected}" data-action="tab" data-tab="${theme.id}">
       ${esc(theme.label)} <span class="tab-count">${pending && theme.id === 'personnes' ? '…' : count}</span></button>`;
   }).join('');
+  if (state.tab === 'randonnee') {
+    return `<div class="tabs" role="tablist" aria-label="Thèmes">${tabs}</div><div class="tab-panel" role="tabpanel">${hikesPanel()}</div>`;
+  }
 
   const isPeople = state.tab === 'personnes';
   const needed = isPeople ? [state.peopleViews] : state.tab === 'culture' ? [state.placeViews, state.peopleViews] : [state.placeViews];
@@ -773,6 +816,7 @@ const actions = {
     speakSample(VOICE_SAMPLES[lang], lang, { rate: store.settings().rate, voiceUri: store.settings().voices[lang] });
   },
   'reload-route'() { route(); },
+  'hikes-retry'() { state.hikes = null; renderHome(); },
   'trip-create'() {
     const created = createTripFrom(document.getElementById('new-trip-name'));
     if (created) location.hash = `#/voyages/${created.id}`;
@@ -887,7 +931,7 @@ onVoicesReady(() => { if (currentRoute === '#/reglages') renderSettings(); });
 
 // Sur mobile, revenir dans l'appli ne recharge pas la page : une nouvelle publication passerait inaperçue.
 let loadedVersion = null;
-const APP_FILES = ['index.html', 'css/styles.css', 'js/app.js', 'js/api.js', 'js/article.js', 'js/places.js', 'js/speech.js', 'js/store.js', 'data/types.json'];
+const APP_FILES = ['index.html', 'css/styles.css', 'js/app.js', 'js/api.js', 'js/article.js', 'js/hikes.js', 'js/places.js', 'js/speech.js', 'js/store.js', 'data/types.json'];
 
 async function publishedVersion() {
   try {

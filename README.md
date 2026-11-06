@@ -19,6 +19,7 @@ Publier le dossier tel quel sur un hébergement statique en HTTPS : la géolocal
 ## Organisation
 
 - `js/places.js` : recherche, classement par thème et tri des lieux et des personnes
+- `js/hikes.js` : randonnées depuis OpenStreetMap (Overpass), à remplacer ici pour changer de source
 - `js/article.js` : récupération, nettoyage et mise en forme des articles
 - `js/speech.js` : écoute des articles (synthèse vocale du navigateur)
 - `js/store.js` : historique, favoris et réglages, sur l'appareil
@@ -28,4 +29,4 @@ Le classement utilise `data/types.json` plutôt que le service SPARQL de Wikidat
 
 ## Licences
 
-Textes de Wikipédia sous CC BY-SA 4.0, avec attribution affichée sous chaque article. Police VT323 sous SIL OFL (`assets/OFL-vt323.txt`).
+Textes de Wikipédia sous CC BY-SA 4.0, avec attribution affichée sous chaque article. Randonnées © contributeurs OpenStreetMap, licence ODbL, avec attribution affichée. Police VT323 sous SIL OFL (`assets/OFL-vt323.txt`).

@@ -4,7 +4,7 @@ const ARTICLES = 'wikitel-articles-v1';
 const ARTICLE_LIMIT = 30;
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css', 'data/types.json', 'assets/vt323.woff2', 'assets/icon.svg', 'assets/icon-192.png',
-  'js/app.js', 'js/api.js', 'js/article.js', 'js/places.js', 'js/speech.js', 'js/store.js',
+  'js/app.js', 'js/api.js', 'js/article.js', 'js/hikes.js', 'js/places.js', 'js/speech.js', 'js/store.js',
 ];
 
 self.addEventListener('install', (event) => {
