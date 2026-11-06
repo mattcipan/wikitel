@@ -1,4 +1,4 @@
-import { THEMES, VIEW_GROUPS, discoverPlaces, discoverPeople, closestInteresting, distanceKm, enrich, inTheme, loadViews, searchArticles } from './places.js';
+import { THEMES, VIEW_GROUPS, discoverPlaces, discoverPeople, closestInteresting, distanceKm, enrich, inTheme, isCity, loadViews, searchArticles } from './places.js';
 import { loadArticle, narrationChunks, wikiRoute } from './article.js';
 import { Narrator, speechSupported, voicesFor, preferredVoice, speakSample, onVoicesReady } from './speech.js';
 import { articleUrl } from './api.js';
@@ -121,7 +121,8 @@ function statusLine() {
   if (!center) return '';
   const radius = store.settings().radiusKm;
   const place = center.label ?? area?.placeName ?? 'votre position';
-  const back = center.source === 'manual' ? '<button class="linkish" data-action="use-gps" type="button">Revenir à ma position</button>' : '';
+  const article = center.title ? `<a href="${esc(wikiRoute(center.lang, center.title))}">Lire l'article</a>` : '';
+  const back = center.source === 'manual' ? `${article} <button class="linkish" data-action="use-gps" type="button">Revenir à ma position</button>` : '';
   return `<p class="status"><span class="dot" aria-hidden="true"></span>Autour de <strong>${esc(place)}</strong> · <a href="#/reglages">${radius} km</a> ${back}</p>`;
 }
 
@@ -555,7 +556,7 @@ async function runSearch(query) {
   searchResults.hidden = false;
   searchResults.innerHTML = results.length
     ? results.map((r, i) => `<div class="result">
-        <a href="${esc(wikiRoute(r.lang, r.title))}"><span class="result-title">${esc(r.title)}</span>${r.description ? `<span class="result-desc">${esc(r.description)}</span>` : ''}</a>
+        <a href="${esc(wikiRoute(r.lang, r.title))}" data-result="${i}"><span class="result-title">${esc(r.title)}</span>${r.description ? `<span class="result-desc">${esc(r.description)}</span>` : ''}</a>
         ${r.lat !== undefined ? `<button class="key key-quiet key-small" type="button" data-action="explore-result" data-index="${i}">EXPLORER</button>` : ''}
       </div>`).join('')
     : '<p class="result-none">Aucun résultat.</p>';
@@ -577,9 +578,22 @@ menu.addEventListener('click', (event) => {
   if (event.target.closest('a')) menu.close();
 });
 
-function exploreAt(lat, lon, label) {
+const placeLabel = (title) => title.replace(/\s*\(.*\)$/, '');
+
+function exploreAt(lat, lon, title, lang) {
   location.hash = '#/';
-  setCenter({ lat, lon, label, source: 'manual' });
+  setCenter({ lat, lon, label: placeLabel(title), title, lang, source: 'manual' });
+}
+
+// Une ville mène à ce qu'il y a à y faire ; tout autre résultat ouvre son article.
+async function openResult(result) {
+  searchInput.value = '';
+  closeSearch();
+  const city = result.lat !== undefined && result.qid
+    ? await isCity(result.qid).catch(() => false)
+    : false;
+  if (city) exploreAt(result.lat, result.lon, result.title, result.lang);
+  else location.hash = wikiRoute(result.lang, result.title);
 }
 
 /* ---------- Actions ---------- */
@@ -600,12 +614,12 @@ const actions = {
     el.textContent = on ? '★ FAVORI' : '☆ FAVORI';
   },
   listen() { startNarration(); },
-  explore() { exploreAt(currentArticle.lat, currentArticle.lon, currentArticle.title.replace(/\s*\(.*\)$/, '')); },
+  explore() { exploreAt(currentArticle.lat, currentArticle.lon, currentArticle.title, currentArticle.lang); },
   'explore-result'(el) {
     const result = lastResults[Number(el.dataset.index)];
     searchInput.value = '';
     closeSearch();
-    exploreAt(result.lat, result.lon, result.title.replace(/\s*\(.*\)$/, ''));
+    exploreAt(result.lat, result.lon, result.title, result.lang);
   },
   'tts-toggle'() { narrator?.toggle(); },
   'tts-prev'() { narrator?.skip(-1); },
@@ -628,6 +642,12 @@ const actions = {
 };
 
 document.addEventListener('click', (event) => {
+  const resultLink = event.target.closest('a[data-result]');
+  if (resultLink) {
+    event.preventDefault();
+    openResult(lastResults[Number(resultLink.dataset.result)]);
+    return;
+  }
   const inPage = event.target.closest('a[data-inpage]');
   if (inPage) {
     event.preventDefault();

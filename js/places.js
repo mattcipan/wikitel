@@ -304,16 +304,22 @@ export function inTheme(themeId, places, people) {
   return themeId === 'culture' ? [...matching, ...people.filter((p) => p.artist)] : matching;
 }
 
+export async function isCity(qid) {
+  const [table, data] = await Promise.all([typeFlags(), wikidata({ action: 'wbgetclaims', entity: qid, property: 'P31' })]);
+  return (data?.claims?.P31 ?? []).some((claim) => (table.get(claim.mainsnak?.datavalue?.value?.id) ?? 0) & F.SETTLEMENT);
+}
+
 export async function searchArticles(query, local) {
   const langs = local && local !== 'fr' ? ['fr', local] : ['fr'];
   const groups = await Promise.all(langs.map(async (lang) => {
     const data = await wikipedia(lang, {
       action: 'query', generator: 'prefixsearch', gpssearch: query, gpslimit: 8, gpsnamespace: 0,
-      prop: 'pageimages|description|coordinates', piprop: 'thumbnail', pithumbsize: 160, pilimit: 8, colimit: 8,
+      prop: 'pageimages|description|coordinates|pageprops', piprop: 'thumbnail', pithumbsize: 160, pilimit: 8, colimit: 8,
+      ppprop: 'wikibase_item',
     }).catch(() => null);
     return (data?.query?.pages ?? []).sort((a, b) => a.index - b.index).map((p) => ({
       lang, title: p.title, description: p.description ?? '', thumb: p.thumbnail?.source ?? '',
-      lat: p.coordinates?.[0]?.lat, lon: p.coordinates?.[0]?.lon,
+      lat: p.coordinates?.[0]?.lat, lon: p.coordinates?.[0]?.lon, qid: p.pageprops?.wikibase_item,
     }));
   }));
   return groups.flat();
