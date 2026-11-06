@@ -1,0 +1,16 @@
+{
+  "name": "Wikitel",
+  "short_name": "Wikitel",
+  "description": "Les lieux et les personnalités autour de vous, racontés par Wikipédia.",
+  "lang": "fr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#12140f",
+  "theme_color": "#12140f",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

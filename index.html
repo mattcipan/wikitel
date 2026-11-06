@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Wikitel</title>
+  <meta name="description" content="Les lieux et les personnalités autour de vous, racontés par Wikipédia.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; manifest-src 'self'; worker-src 'self'; img-src 'self' data: https://upload.wikimedia.org https://*.wikipedia.org https://*.wikimedia.org; connect-src 'self' https://*.wikipedia.org https://www.wikidata.org; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="theme-color" content="#ede6d6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#12140f" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Wikitel">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/icon-180.png">
+  <link rel="preload" href="assets/vt323.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a class="skip" href="#view">Aller au contenu</a>
+  <header class="topbar">
+    <button class="icon-btn" id="menu-open" type="button" aria-label="Ouvrir le sommaire" aria-haspopup="dialog">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </button>
+    <a class="logo" href="#/" aria-label="Wikitel, accueil">WIKITEL<span class="cursor" aria-hidden="true"></span></a>
+    <div class="search" id="search" role="search">
+      <button class="icon-btn search-toggle" id="search-toggle" type="button" aria-label="Rechercher" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3a7 7 0 0 1 5.6 11.2l5.1 5.1-1.4 1.4-5.1-5.1A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/></svg>
+      </button>
+      <input id="search-input" type="search" placeholder="Rechercher un lieu, une ville…" aria-label="Rechercher dans Wikipédia" autocomplete="off" enterkeyhint="search">
+      <div class="search-results" id="search-results" hidden></div>
+    </div>
+  </header>
+
+  <dialog class="drawer" id="menu" aria-label="Sommaire">
+    <div class="drawer-head">
+      <span class="drawer-title">SOMMAIRE</span>
+      <button class="icon-btn" id="menu-close" type="button" aria-label="Fermer le sommaire">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4z"/></svg>
+      </button>
+    </div>
+    <nav class="drawer-nav">
+      <a href="#/">Autour de moi</a>
+      <a href="#/hasard">Article au hasard</a>
+      <a href="#/historique">Historique</a>
+      <a href="#/favoris">Favoris</a>
+      <a href="#/reglages">Réglages</a>
+      <a href="#/compte">Mon compte</a>
+    </nav>
+    <p class="drawer-foot">Contenus issus de Wikipédia et Wikidata.<br>Wikitel n'est pas affilié à la Wikimedia Foundation.</p>
+  </dialog>
+
+  <main id="view" tabindex="-1"></main>
+  <div id="player-slot"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
