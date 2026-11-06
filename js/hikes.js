@@ -18,10 +18,11 @@ const NATURE_MIN_KM = 10;
 const LENGTH_MISMATCH = 0.3;
 
 // Adresse du relais Cloudflare (voir relay/worker.js), pour les sources refusant l'accès direct.
-const RELAY_URL = '';
+const RELAY_URL = 'https://wikitel-relais.cloudflare-shorten309.workers.dev';
 const SEARCH_LAT = 0.27; // environ 30 km
 const SEARCH_LON = 0.38;
 const MAX_SOURCES = 4;
+const CLOSER_SCALE = 0.4; // environ 12 km
 const GEOTREK_TIMEOUT_MS = 20000;
 const GEOTREK_FIELDS = 'id,name,length_2d,duration,ascent,departure,departure_geom,route';
 const CLOSED_ROUTE = /ferm[ée]|interdit|supprim/i;
@@ -47,17 +48,38 @@ function geotrekUrl(source, bbox) {
   return `${source.api}/trek/?${params}`;
 }
 
-async function treksFrom(source, center, bbox) {
+function bboxAround(center, scale = 1) {
+  return {
+    west: center.lon - SEARCH_LON * scale, south: center.lat - SEARCH_LAT * scale,
+    east: center.lon + SEARCH_LON * scale, north: center.lat + SEARCH_LAT * scale,
+  };
+}
+
+const bboxParam = ({ west, south, east, north }) => `${west},${south},${east},${north}`;
+
+async function fetchTreks(source, bbox) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), GEOTREK_TIMEOUT_MS);
   try {
     const res = await fetch(geotrekUrl(source, bbox), { signal: controller.signal });
     if (!res.ok) throw new HikesUnavailable(`HTTP ${res.status}`);
-    const { results = [] } = await res.json();
-    return results.map((trek) => toGeotrekHike(trek, source, center)).filter(Boolean);
+    return await res.json();
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function treksFrom(source, center) {
+  const first = await fetchTreks(source, bboxParam(bboxAround(center)));
+  let treks = first.results ?? [];
+  // Au-delà d'une page, les fiches suivent l'ordre alphabétique et des voisines manqueraient :
+  // on complète avec une zone resserrée autour du centre.
+  if ((first.count ?? 0) > treks.length) {
+    const closer = await fetchTreks(source, bboxParam(bboxAround(center, CLOSER_SCALE))).catch(() => ({}));
+    const known = new Set(treks.map((trek) => trek.id));
+    treks = [...treks, ...(closer.results ?? []).filter((trek) => !known.has(trek.id))];
+  }
+  return treks.map((trek) => toGeotrekHike(trek, source, center)).filter(Boolean);
 }
 
 function toGeotrekHike(trek, source, center) {
@@ -74,17 +96,13 @@ function toGeotrekHike(trek, source, center) {
 }
 
 async function geotrekHikes(center) {
-  const window = {
-    west: center.lon - SEARCH_LON, south: center.lat - SEARCH_LAT,
-    east: center.lon + SEARCH_LON, north: center.lat + SEARCH_LAT,
-  };
-  const bbox = `${window.west},${window.south},${window.east},${window.north}`;
+  const window = bboxAround(center);
   const sources = (await geotrekSources())
     .filter((s) => s.direct || RELAY_URL)
     .filter((s) => s.bbox[0] <= window.east && s.bbox[2] >= window.west && s.bbox[1] <= window.north && s.bbox[3] >= window.south)
     .sort((a, b) => b.count - a.count)
     .slice(0, MAX_SOURCES);
-  const answers = await Promise.allSettled(sources.map((source) => treksFrom(source, center, bbox)));
+  const answers = await Promise.allSettled(sources.map((source) => treksFrom(source, center)));
   return answers.flatMap((answer) => (answer.status === 'fulfilled' ? answer.value : []));
 }
 
