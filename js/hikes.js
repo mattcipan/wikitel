@@ -5,6 +5,9 @@ import { readArea, writeArea } from './store.js';
 
 const ENDPOINT = 'https://overpass-api.de/api/interpreter';
 const TIMEOUT_MS = 90000;
+const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
+const RETRY_DELAYS_S = [5, 15];
+const MAX_RETRY_WAIT_S = 30;
 const SEARCH_RADII_KM = [15, 30];
 const MIN_RESULTS = 3;
 const MAX_RESULTS = 6;
@@ -15,9 +18,7 @@ const LENGTH_MISMATCH = 0.3;
 
 export class HikesUnavailable extends Error {}
 
-async function queryRoutes(center, radiusKm) {
-  // Les grands itinéraires nationaux (GR) sont exclus : on cherche des sorties à la journée.
-  const query = `[out:json][timeout:60];relation["route"="hiking"]["network"!~"^(nwn|iwn)$"](around:${radiusKm * 1000},${center.lat},${center.lon});out geom;`;
+async function requestRoutes(query) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -26,12 +27,33 @@ async function queryRoutes(center, radiusKm) {
       body: new URLSearchParams({ data: query }),
       signal: controller.signal,
     });
+    if (RETRYABLE_STATUS.has(res.status)) {
+      const error = new HikesUnavailable(`HTTP ${res.status}`);
+      error.retryable = true;
+      error.retryAfter = Number(res.headers.get('Retry-After')) || 0;
+      throw error;
+    }
     if (!res.ok) throw new HikesUnavailable(`HTTP ${res.status}`);
     return (await res.json()).elements ?? [];
   } catch (err) {
     throw err instanceof HikesUnavailable ? err : new HikesUnavailable(err.message);
   } finally {
     clearTimeout(timer);
+  }
+}
+
+async function queryRoutes(center, radiusKm) {
+  // Les grands itinéraires nationaux (GR) sont exclus : on cherche des sorties à la journée.
+  const query = `[out:json][timeout:60];relation["route"="hiking"]["network"!~"^(nwn|iwn)$"](around:${radiusKm * 1000},${center.lat},${center.lon});out geom;`;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await requestRoutes(query);
+    } catch (err) {
+      // Ce serveur public renvoie assez souvent des erreurs passagères.
+      const waitSeconds = err.retryAfter || RETRY_DELAYS_S[attempt];
+      if (!err.retryable || !RETRY_DELAYS_S[attempt] || waitSeconds > MAX_RETRY_WAIT_S) throw err;
+      await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+    }
   }
 }
 
