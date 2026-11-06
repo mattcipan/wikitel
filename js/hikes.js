@@ -1,5 +1,6 @@
-// Randonnées autour d'un point, depuis OpenStreetMap (Overpass). La source est isolée ici :
-// un autre fournisseur n'aurait qu'à renvoyer les mêmes champs depuis `loadHikes`.
+// Randonnées autour d'un point : sites Geotrek en priorité, OpenStreetMap (Overpass) en complément.
+// De Geotrek, on n'affiche que des faits (nom, distance, durée, dénivelé, départ) et un lien vers la
+// fiche officielle : ni texte ni photo, rien n'est recopié ailleurs que dans le cache de l'appareil.
 import { distanceKm } from './places.js';
 import { readArea, writeArea } from './store.js';
 
@@ -16,7 +17,76 @@ const MAX_LENGTH_KM = 40;
 const NATURE_MIN_KM = 10;
 const LENGTH_MISMATCH = 0.3;
 
+// Adresse du relais Cloudflare (voir relay/worker.js), pour les sources refusant l'accès direct.
+const RELAY_URL = '';
+const SEARCH_LAT = 0.27; // environ 30 km
+const SEARCH_LON = 0.38;
+const MAX_SOURCES = 4;
+const GEOTREK_TIMEOUT_MS = 20000;
+const GEOTREK_FIELDS = 'id,name,length_2d,duration,ascent,departure,departure_geom,route';
+const CLOSED_ROUTE = /ferm[ée]|interdit|supprim/i;
+// Les tracés et marques GR sont protégés par la FFRandonnée.
+const GR_ROUTE = /\bGRP?\b|\bGR\s?\d|GR®/i;
+
 export class HikesUnavailable extends Error {}
+
+let sourcesFile;
+function geotrekSources() {
+  sourcesFile ??= fetch('data/geotrek-sources.json').then((res) => res.json()).then((data) => data.sources);
+  return sourcesFile;
+}
+
+function geotrekUrl(source, bbox) {
+  const practices = source.practices.join(',');
+  if (!source.direct) {
+    return `${RELAY_URL}/${source.key}?${new URLSearchParams({ in_bbox: bbox, practices })}`;
+  }
+  const params = new URLSearchParams({
+    format: 'json', language: 'fr', page_size: 100, fields: GEOTREK_FIELDS, in_bbox: bbox, practices,
+  });
+  return `${source.api}/trek/?${params}`;
+}
+
+async function treksFrom(source, center, bbox) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GEOTREK_TIMEOUT_MS);
+  try {
+    const res = await fetch(geotrekUrl(source, bbox), { signal: controller.signal });
+    if (!res.ok) throw new HikesUnavailable(`HTTP ${res.status}`);
+    const { results = [] } = await res.json();
+    return results.map((trek) => toGeotrekHike(trek, source, center)).filter(Boolean);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function toGeotrekHike(trek, source, center) {
+  const lengthKm = (trek.length_2d ?? 0) / 1000;
+  const [lon, lat] = trek.departure_geom ?? [];
+  if (!trek.name || lat === undefined || CLOSED_ROUTE.test(trek.name) || GR_ROUTE.test(trek.name)) return null;
+  if (lengthKm < MIN_LENGTH_KM || lengthKm > MAX_LENGTH_KM) return null;
+  const nearestKm = distanceKm(center, { lat, lon });
+  return {
+    id: `${source.key}-${trek.id}`, kind: 'geotrek', name: trek.name, lengthKm, nearestKm, lat, lon,
+    loop: source.loops.includes(trek.route), durationHours: trek.duration || null, ascent: trek.ascent || null,
+    sourceName: source.name, url: `${source.site.replace(/\/$/, '')}/trek/${trek.id}`,
+  };
+}
+
+async function geotrekHikes(center) {
+  const window = {
+    west: center.lon - SEARCH_LON, south: center.lat - SEARCH_LAT,
+    east: center.lon + SEARCH_LON, north: center.lat + SEARCH_LAT,
+  };
+  const bbox = `${window.west},${window.south},${window.east},${window.north}`;
+  const sources = (await geotrekSources())
+    .filter((s) => s.direct || RELAY_URL)
+    .filter((s) => s.bbox[0] <= window.east && s.bbox[2] >= window.west && s.bbox[1] <= window.north && s.bbox[3] >= window.south)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, MAX_SOURCES);
+  const answers = await Promise.allSettled(sources.map((source) => treksFrom(source, center, bbox)));
+  return answers.flatMap((answer) => (answer.status === 'fulfilled' ? answer.value : []));
+}
 
 async function requestRoutes(query) {
   const controller = new AbortController();
@@ -82,7 +152,7 @@ function toHike(route, center) {
   const declared = Number.parseFloat(distance);
   if (declared && Math.abs(declared - lengthKm) / declared > LENGTH_MISMATCH) return null;
   return {
-    id: route.id, name, lengthKm, nearestKm, lat: nearest.lat, lon: nearest.lon, loop: roundtrip === 'yes',
+    id: route.id, kind: 'osm', name, lengthKm, nearestKm, lat: nearest.lat, lon: nearest.lon, loop: roundtrip === 'yes',
   };
 }
 
@@ -94,7 +164,8 @@ function select(hikes) {
   const seen = new Set();
   const unique = hikes
     .filter((hike) => {
-      const key = hike.name.toLowerCase();
+      // Un même itinéraire figure parfois chez plusieurs sources, à la ponctuation près.
+      const key = hike.name.normalize('NFD').replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -113,11 +184,21 @@ export async function loadHikes(center) {
   const key = `hikes:${center.lat.toFixed(3)},${center.lon.toFixed(3)}`;
   const cached = readArea(key);
   if (cached) return cached;
-  let chosen = [];
-  for (const radius of SEARCH_RADII_KM) {
-    const routes = await queryRoutes(center, radius);
-    chosen = select(routes.map((route) => toHike(route, center)).filter(Boolean));
-    if (chosen.length >= MIN_RESULTS) break;
+  const fromGeotrek = await geotrekHikes(center).catch(() => []);
+  let chosen = select(fromGeotrek);
+  // OpenStreetMap est plus lent et moins détaillé : il ne sert qu'à combler un manque.
+  if (chosen.length < MIN_RESULTS) {
+    let fromOsm = [];
+    try {
+      for (const radius of SEARCH_RADII_KM) {
+        const routes = await queryRoutes(center, radius);
+        fromOsm = routes.map((route) => toHike(route, center)).filter(Boolean);
+        if (select([...fromGeotrek, ...fromOsm]).length >= MIN_RESULTS) break;
+      }
+    } catch (err) {
+      if (!chosen.length) throw err;
+    }
+    chosen = select([...fromGeotrek, ...fromOsm]);
   }
   writeArea(key, chosen);
   return chosen;

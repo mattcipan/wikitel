@@ -165,13 +165,28 @@ function startHikes() {
     .catch(() => { if (requestId === state.requestId) { state.hikes = 'failed'; renderIfHome(); } });
 }
 
+function formatDuration(hours) {
+  const total = Math.round(hours * 60);
+  const minutes = total % 60;
+  return `${Math.floor(total / 60)} h${minutes ? ` ${String(minutes).padStart(2, '0')}` : ''}`;
+}
+
 function hikeCard(hike) {
-  const facts = [formatDistance(hike.lengthKm), hike.loop ? 'boucle' : null, `sentier à ${formatDistance(hike.nearestKm)}`].filter(Boolean).join(' · ');
+  const official = hike.kind === 'geotrek';
+  const facts = [
+    formatDistance(hike.lengthKm),
+    hike.durationHours ? formatDuration(hike.durationHours) : null,
+    hike.ascent ? `+${hike.ascent} m` : null,
+    hike.loop ? 'boucle' : null,
+    `${official ? 'départ' : 'sentier'} à ${formatDistance(hike.nearestKm)}`,
+  ].filter(Boolean).join(' · ');
+  const link = official ? hike.url : `https://www.openstreetmap.org/relation/${encodeURIComponent(hike.id)}`;
   return `<li class="hike">
     <span class="card-title">${esc(hike.name)}</span>
     <span class="card-meta">${esc(facts)}</span>
+    <span class="views-note">Source : ${esc(official ? hike.sourceName : 'OpenStreetMap')}</span>
     <span class="hike-actions">
-      <a class="key key-quiet key-small" target="_blank" rel="noopener noreferrer" href="https://www.openstreetmap.org/relation/${encodeURIComponent(hike.id)}">VOIR LE TRACÉ</a>
+      <a class="key key-quiet key-small" target="_blank" rel="noopener noreferrer" href="${esc(link)}">${official ? 'FICHE OFFICIELLE' : 'VOIR LE TRACÉ'}</a>
       <a class="key key-quiet key-small" target="_blank" rel="noopener noreferrer" href="https://www.google.com/maps/dir/?api=1&amp;destination=${hike.lat},${hike.lon}">Y ALLER</a>
     </span>
   </li>`;
@@ -187,8 +202,12 @@ function hikesPanel() {
       <button class="key" type="button" data-action="hikes-retry">RÉESSAYER</button></div>`;
   }
   if (!state.hikes.length) return '<p class="empty">Aucune randonnée balisée trouvée à moins de 30 km.</p>';
+  const hasOsm = state.hikes.some((hike) => hike.kind !== 'geotrek');
+  const osmCredit = hasOsm
+    ? ' Données OpenStreetMap © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">contributeurs OpenStreetMap</a>, licence ODbL. Pour ces itinéraires, « Y ALLER » mène au point du sentier le plus proche, pas forcément à son départ.'
+    : '';
   return `<ul class="cards">${state.hikes.map(hikeCard).join('')}</ul>
-    <p class="legal hike-credit">Données © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">contributeurs OpenStreetMap</a>, licence ODbL. Vérifiez le balisage et les conditions sur place. « Y ALLER » mène au point du sentier le plus proche de la ville, qui n'est pas forcément son départ.</p>`;
+    <p class="legal hike-credit">Vérifiez le balisage et les conditions sur place.${osmCredit}</p>`;
 }
 
 function themeList() {
@@ -931,7 +950,7 @@ onVoicesReady(() => { if (currentRoute === '#/reglages') renderSettings(); });
 
 // Sur mobile, revenir dans l'appli ne recharge pas la page : une nouvelle publication passerait inaperçue.
 let loadedVersion = null;
-const APP_FILES = ['index.html', 'css/styles.css', 'js/app.js', 'js/api.js', 'js/article.js', 'js/hikes.js', 'js/places.js', 'js/speech.js', 'js/store.js', 'data/types.json'];
+const APP_FILES = ['index.html', 'css/styles.css', 'js/app.js', 'js/api.js', 'js/article.js', 'js/hikes.js', 'js/places.js', 'js/speech.js', 'js/store.js', 'data/types.json', 'data/geotrek-sources.json'];
 
 async function publishedVersion() {
   try {

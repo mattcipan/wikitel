@@ -1,0 +1,508 @@
+{
+ "sources": [
+  {
+   "key": "geotrek-auvergnerhonealpes-tourisme-com",
+   "name": "AURA Tourisme",
+   "site": "https://www.laregionduvelo.fr/",
+   "api": "https://geotrek.auvergnerhonealpes-tourisme.com/api/v2",
+   "direct": false,
+   "bbox": [
+    2.534,
+    44.17,
+    6.418,
+    46.377
+   ],
+   "count": 1988,
+   "practices": [
+    1
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geotrek-cd05-aggregator-makina-corpus-net",
+   "name": "Conseil départemental des Hautes-Alpes (CD05)",
+   "site": "https://alpesrando.net/",
+   "api": "https://geotrek-cd05-aggregator.makina-corpus.net/api/v2",
+   "direct": false,
+   "bbox": [
+    5.275,
+    43.961,
+    7.049,
+    45.12
+   ],
+   "count": 533,
+   "practices": [
+    1
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geotrek-aggr-gard-fr",
+   "name": "Conseil départemental du Gard (CD30)",
+   "site": "https://rando.gard.fr/",
+   "api": "https://geotrek-aggr.gard.fr/api/v2",
+   "direct": false,
+   "bbox": [
+    3.297,
+    43.484,
+    4.723,
+    44.44
+   ],
+   "count": 253,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "admin-rando-loire-atlantique-fr",
+   "name": "Conseil départemental de Loire-Atlantique (CD44)",
+   "site": "https://rando.loire-atlantique.fr/",
+   "api": "https://admin-rando.loire-atlantique.fr/api/v2",
+   "direct": false,
+   "bbox": [
+    -2.549,
+    46.928,
+    -0.931,
+    47.795
+   ],
+   "count": 362,
+   "practices": [
+    1
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geotrek-admin-le64-fr",
+   "name": "Conseil départemental des Pyrénées-Atlantiques (CD64)",
+   "site": "https://nature64.fr/",
+   "api": "https://geotrek-admin.le64.fr/api/v2",
+   "direct": false,
+   "bbox": [
+    -1.774,
+    42.796,
+    -0.017,
+    43.656
+   ],
+   "count": 397,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geotrekadmin-tarn-fr",
+   "name": "Conseil départemental du Tarn (CD81)",
+   "site": "https://randopleinenature.tarn.fr/",
+   "api": "https://geotrekadmin.tarn.fr/api/v2",
+   "direct": false,
+   "bbox": [
+    1.686,
+    43.436,
+    3.007,
+    44.192
+   ],
+   "count": 340,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "gestion-sportnature-var-fr",
+   "name": "Conseil départemental du Var (CD83)",
+   "site": "https://sportnature.var.fr/",
+   "api": "https://gestion-sportnature.var.fr/api/v2",
+   "direct": false,
+   "bbox": [
+    5.723,
+    43.147,
+    6.691,
+    43.775
+   ],
+   "count": 55,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geotrek-admin-cevennes-parcnational-net",
+   "name": "Parc National des Cévennes",
+   "site": "https://destination.cevennes-parcnational.fr/",
+   "api": "https://geotrek-admin.cevennes-parcnational.net/api/v2",
+   "direct": true,
+   "bbox": [
+    3.208,
+    43.954,
+    4.2,
+    44.727
+   ],
+   "count": 298,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geotrek-guadeloupe-parcnational-fr",
+   "name": "Parc National de Guadeloupe",
+   "site": "https://www.randoguadeloupe.gp/",
+   "api": "https://geotrek.guadeloupe-parcnational.fr/api/v2",
+   "direct": true,
+   "bbox": [
+    -61.794,
+    15.873,
+    -61.017,
+    16.486
+   ],
+   "count": 92,
+   "practices": [
+    1
+   ],
+   "loops": [
+    2
+   ]
+  },
+  {
+   "key": "adminrando-marittimemercantour-eu",
+   "name": "Parc National du Mercantour",
+   "site": "http://destination.marittimemercantour.eu/",
+   "api": "https://adminrando.marittimemercantour.eu/api/v2",
+   "direct": false,
+   "bbox": [
+    6.596,
+    43.779,
+    8.095,
+    44.476
+   ],
+   "count": 160,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geotrek-admin-portcros-parcnational-fr",
+   "name": "Parc National de Port-Cros",
+   "site": "https://destination.portcros-parcnational.fr/",
+   "api": "https://geotrek-admin.portcros-parcnational.fr/api/v2",
+   "direct": false,
+   "bbox": [
+    6.104,
+    43.001,
+    6.601,
+    43.184
+   ],
+   "count": 14,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "adminrando-vanoise-com",
+   "name": "Parc National de la Vanoise",
+   "site": "https://rando.vanoise.com/",
+   "api": "https://adminrando.vanoise.com/api/v2",
+   "direct": true,
+   "bbox": [
+    6.203,
+    45.09,
+    7.143,
+    45.697
+   ],
+   "count": 166,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "admin-pnrgca-openig-org",
+   "name": "Parc Naturel Régional de l'Aubrac",
+   "site": "https://www.rando-aubrac.fr/",
+   "api": "https://admin-pnrgca.openig.org/api/v2",
+   "direct": true,
+   "bbox": [
+    1.924,
+    43.67,
+    3.924,
+    45.033
+   ],
+   "count": 861,
+   "practices": [
+    12
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geotrek-perche-makina-corpus-net",
+   "name": "Parc Naturel Régional du Perche",
+   "site": "https://rando-perche.fr/",
+   "api": "https://geotrek-perche.makina-corpus.net/api/v2",
+   "direct": false,
+   "bbox": [
+    0.425,
+    48.138,
+    1.098,
+    48.678
+   ],
+   "count": 200,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "admin-pilat-rando-fr",
+   "name": "Parc Naturel Régional du Pilat",
+   "site": "https://pilat-rando.fr",
+   "api": "https://admin.pilat-rando.fr/api/v2",
+   "direct": false,
+   "bbox": [
+    4.325,
+    45.242,
+    4.801,
+    45.584
+   ],
+   "count": 173,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geotrek-parcdumorvan-org",
+   "name": "Parc Naturel Régional du Morvan",
+   "site": "https://rando.parcdumorvan.org",
+   "api": "https://geotrek.parcdumorvan.org/api/v2",
+   "direct": false,
+   "bbox": [
+    3.655,
+    46.789,
+    4.331,
+    47.498
+   ],
+   "count": 39,
+   "practices": [
+    4,
+    5
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geo-pnr-vercors-fr",
+   "name": "Parc Naturel Régional du Vercors",
+   "site": "https://rando.parc-du-vercors.fr/",
+   "api": "https://geo.pnr-vercors.fr/api/v2",
+   "direct": true,
+   "bbox": [
+    4.774,
+    44.602,
+    5.768,
+    45.264
+   ],
+   "count": 207,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "randoadmin-parc-haut-jura-fr",
+   "name": "Parc Naturel Régional du Haut-Jura",
+   "site": "https://randonature.parc-haut-jura.fr/",
+   "api": "https://randoadmin.parc-haut-jura.fr/api/v2",
+   "direct": true,
+   "bbox": [
+    5.658,
+    46.12,
+    6.301,
+    46.85
+   ],
+   "count": 165,
+   "practices": [
+    1
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geotrek-parcdesbauges-com",
+   "name": "Parc Naturel Régional du Massif des Bauges",
+   "site": "https://rando.parcdesbauges.com/",
+   "api": "https://geotrek.parcdesbauges.com/api/v2",
+   "direct": true,
+   "bbox": [
+    5.935,
+    45.507,
+    6.418,
+    45.893
+   ],
+   "count": 72,
+   "practices": [
+    4,
+    6
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geotrek-tourisme-pyrenees-mediterranee-fr",
+   "name": "Communauté de Communes Albères Côte Vermeille",
+   "site": "https://rando.tourisme-pyrenees-mediterranee.fr",
+   "api": "https://geotrek.tourisme-pyrenees-mediterranee.fr/api/v2",
+   "direct": true,
+   "bbox": [
+    2.868,
+    42.264,
+    3.277,
+    42.581
+   ],
+   "count": 132,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "adminrando-coeurcoteaux-comminges-fr",
+   "name": "Communauté de Communes Cœur et Coteaux du Comminges",
+   "site": "https://rando.coeurcoteaux-comminges.fr/",
+   "api": "https://adminrando.coeurcoteaux-comminges.fr/api/v2",
+   "direct": false,
+   "bbox": [
+    0.497,
+    42.859,
+    1.443,
+    43.608
+   ],
+   "count": 124,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1,
+    6
+   ]
+  },
+  {
+   "key": "rando-admin-intercauxvexin-fr",
+   "name": "Communauté de Communes Inter Caux Vexin",
+   "site": "https://rando.intercauxvexin.fr/",
+   "api": "https://rando.admin.intercauxvexin.fr/api/v2",
+   "direct": false,
+   "bbox": [
+    0.995,
+    49.433,
+    1.409,
+    49.628
+   ],
+   "count": 20,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geotrek65admin-openig-org",
+   "name": "Communauté de Communes Vallées des Gaves",
+   "site": "https://rando.valleesdegavarnie.com/",
+   "api": "https://geotrek65admin.openig.org/api/v2",
+   "direct": true,
+   "bbox": [
+    -0.283,
+    42.713,
+    0.634,
+    43.267
+   ],
+   "count": 343,
+   "practices": [
+    4,
+    6
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geotrekadmin-compiegne-pierrefonds-fr",
+   "name": "Agglomération de la région de Compiègne",
+   "site": "https://itineraires.compiegne-pierrefonds.fr/",
+   "api": "https://geotrekadmin.compiegne-pierrefonds.fr/api/v2",
+   "direct": false,
+   "bbox": [
+    2.755,
+    49.344,
+    3.126,
+    49.486
+   ],
+   "count": 28,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  },
+  {
+   "key": "geotrek-sudviennepoitou-com",
+   "name": "Office de Tourisme Sud Vienne Poitou",
+   "site": "https://rando.sudviennepoitou.com/",
+   "api": "https://geotrek.sudviennepoitou.com/api/v2",
+   "direct": false,
+   "bbox": [
+    0.517,
+    46.116,
+    1.191,
+    46.68
+   ],
+   "count": 80,
+   "practices": [
+    4
+   ],
+   "loops": [
+    1
+   ]
+  }
+ ]
+}
