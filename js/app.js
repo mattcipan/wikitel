@@ -407,9 +407,13 @@ function jumpInPage(id) {
 
 /* ---------- Listes et réglages ---------- */
 
+const backKey = '<div class="page-keys"><button class="key key-quiet" type="button" data-action="back">RETOUR</button></div>';
+
+const seePlacesLabel = () => `VOIR LES LIEUX · ${store.settings().radiusKm} KM`;
+
 function renderStoredList(title, items, emptyMessage, footer = '') {
   document.title = `${title} · Wikitel`;
-  view.innerHTML = `<div class="page"><h1 class="pixel">${esc(title.toUpperCase())}</h1>
+  view.innerHTML = `<div class="page">${backKey}<h1 class="pixel">${esc(title.toUpperCase())}</h1>
     ${items.length ? `<ul class="cards">${items.map((item) => `<li><a class="card" href="${esc(wikiRoute(item.lang, item.title))}">
       <span class="card-img">${item.thumb ? `<img src="${esc(item.thumb)}" alt="" loading="lazy" decoding="async">` : '<span class="mosaic" aria-hidden="true"></span>'}</span>
       <span class="card-body"><span class="card-title">${esc(item.title)}</span>
@@ -436,18 +440,20 @@ function renderSettings() {
   document.title = 'Réglages · Wikitel';
   const s = store.settings();
   const langs = [...new Set(['fr', state.area?.local].filter(Boolean))];
-  view.innerHTML = `<div class="page"><h1 class="pixel">RÉGLAGES</h1>
+  view.innerHTML = `<div class="page">${backKey}<h1 class="pixel">RÉGLAGES</h1>
+    <p class="settings-note">Vos choix sont enregistrés automatiquement.</p>
     ${radioGroup('radius', 'Périmètre de recherche', [[1, '1 km'], [2, '2 km'], [5, '5 km'], [10, '10 km']], s.radiusKm)}
     ${radioGroup('rate', 'Vitesse de la voix', [[0.8, '0,8×'], [1, '1×'], [1.25, '1,25×'], [1.5, '1,5×']], s.rate)}
     ${speechSupported() ? langs.map(voiceField).join('') : '<p class="notice">La synthèse vocale n\'est pas disponible sur ce navigateur.</p>'}
     ${radioGroup('theme', 'Apparence', [['auto', 'Automatique'], ['light', 'Clair'], ['dark', 'Sombre']], s.theme)}
     <p class="legal">Votre position sert uniquement à chercher les lieux proches auprès de Wikipédia. Votre historique et vos favoris restent sur cet appareil.</p>
+    <div class="page-done"><a class="key key-wide" id="see-places" href="#/">${esc(seePlacesLabel())}</a></div>
   </div>`;
 }
 
 function renderAccount() {
   document.title = 'Mon compte · Wikitel';
-  view.innerHTML = `<div class="page"><h1 class="pixel">MON COMPTE</h1>
+  view.innerHTML = `<div class="page">${backKey}<h1 class="pixel">MON COMPTE</h1>
     <p>La connexion et la synchronisation entre appareils arriveront dans la prochaine version.</p>
     <p>En attendant, votre historique et vos favoris sont enregistrés sur cet appareil. Ils pourront être repris à votre première connexion.</p>
     <div class="key-row"><a class="key" href="#/historique">HISTORIQUE</a><a class="key key-quiet" href="#/favoris">FAVORIS</a></div></div>`;
@@ -621,6 +627,9 @@ document.addEventListener('change', (event) => {
   const { name, value } = event.target;
   if (name === 'radius') {
     store.updateSettings({ radiusKm: Number(value) });
+    document.getElementById('see-places').textContent = seePlacesLabel();
+    // La liste change : on la rouvrira en haut, pas à l'ancienne position.
+    scrollByRoute.delete('#/');
     if (state.center) setCenter(state.center);
   } else if (name === 'rate') {
     store.updateSettings({ rate: Number(value) });
