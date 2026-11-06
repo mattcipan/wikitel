@@ -1,12 +1,22 @@
-// Visite guidée : lecture de l'article avec la synthèse vocale du navigateur.
+// Écoute : lecture de l'article avec la synthèse vocale du navigateur.
 // `pause()` est peu fiable sur Android, donc on annule et on reprend au début du morceau en cours.
 const synth = window.speechSynthesis;
 
 export const speechSupported = () => Boolean(synth && window.SpeechSynthesisUtterance);
 
+// Sans région, certains navigateurs retombent sur la voix par défaut du téléphone, souvent anglaise.
+const REGIONS = { fr: 'fr-FR', en: 'en-GB', de: 'de-DE', es: 'es-ES', it: 'it-IT', nl: 'nl-NL', pt: 'pt-PT' };
+const regionFor = (lang) => REGIONS[lang] ?? lang;
+
+// Android peut écrire « fr_FR », une forme que la synthèse vocale ne reconnaît pas toujours.
+const normalizeLocale = (locale) => locale.replace('_', '-');
+
 export function voicesFor(lang) {
   if (!speechSupported()) return [];
-  return synth.getVoices().filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith(lang));
+  return synth.getVoices().filter((v) => {
+    const locale = normalizeLocale(v.lang).toLowerCase();
+    return locale === lang || locale.startsWith(`${lang}-`);
+  });
 }
 
 // Les voix arrivent parfois après le chargement de la page.
@@ -14,13 +24,33 @@ export function onVoicesReady(callback) {
   if (speechSupported()) synth.addEventListener?.('voiceschanged', callback);
 }
 
-function preferredVoice(lang, savedUri) {
+// Sur Android, ce premier appel déclenche le chargement des voix.
+if (speechSupported()) synth.getVoices();
+
+export function preferredVoice(lang, savedUri) {
   const voices = voicesFor(lang);
+  const region = regionFor(lang).toLowerCase();
+  const inRegion = voices.filter((v) => normalizeLocale(v.lang).toLowerCase() === region);
+  const candidates = inRegion.length ? inRegion : voices;
   return voices.find((v) => v.voiceURI === savedUri)
-    ?? voices.find((v) => /premium|enhanced|natural|neural/i.test(v.name))
-    ?? voices.find((v) => v.default)
-    ?? voices[0]
+    ?? candidates.find((v) => /premium|enhanced|natural|neural/i.test(v.name))
+    ?? candidates.find((v) => v.default)
+    ?? candidates[0]
     ?? null;
+}
+
+function configure(utterance, lang, voiceUri) {
+  const voice = preferredVoice(lang, voiceUri);
+  utterance.lang = voice ? normalizeLocale(voice.lang) : regionFor(lang);
+  if (voice) utterance.voice = voice;
+}
+
+export function speakSample(text, lang, { rate, voiceUri }) {
+  const utterance = new SpeechSynthesisUtterance(text);
+  configure(utterance, lang, voiceUri);
+  utterance.rate = rate;
+  synth.cancel();
+  synth.speak(utterance);
 }
 
 export class Narrator {
@@ -54,9 +84,7 @@ export class Narrator {
     const generation = ++this.generation;
     const { rate, voiceUri } = this.getOptions();
     const utterance = new SpeechSynthesisUtterance(this.chunks[this.index].text);
-    const voice = preferredVoice(this.lang, voiceUri);
-    utterance.lang = voice?.lang ?? this.lang;
-    if (voice) utterance.voice = voice;
+    configure(utterance, this.lang, voiceUri);
     utterance.rate = rate;
     utterance.onend = () => {
       if (generation !== this.generation || this.state !== 'playing') return;

@@ -1,6 +1,6 @@
 import { THEMES, VIEW_GROUPS, discoverPlaces, discoverPeople, closestInteresting, distanceKm, enrich, inTheme, loadViews, searchArticles } from './places.js';
 import { loadArticle, narrationChunks, wikiRoute } from './article.js';
-import { Narrator, speechSupported, voicesFor, onVoicesReady } from './speech.js';
+import { Narrator, speechSupported, voicesFor, preferredVoice, speakSample, onVoicesReady } from './speech.js';
 import { articleUrl } from './api.js';
 import * as store from './store.js';
 
@@ -279,10 +279,10 @@ function renderPlayer(n) {
   const voiceMissing = voicesFor(n.lang).length === 0 && window.speechSynthesis.getVoices().length > 0;
   const message = n.state === 'error'
     ? 'La lecture s\'est interrompue. Appuyez sur lecture pour reprendre.'
-    : n.state === 'ended' ? 'Fin de la visite guidée.'
+    : n.state === 'ended' ? 'Fin de la lecture.'
     : voiceMissing ? `Aucune voix « ${n.lang} » sur cet appareil : la lecture peut mal sonner.` : '';
   const rate = store.settings().rate;
-  playerSlot.innerHTML = `<div class="player" role="region" aria-label="Visite guidée">
+  playerSlot.innerHTML = `<div class="player" role="region" aria-label="Lecture audio">
     <progress max="${n.chunks.length}" value="${n.index + 1}" aria-label="Avancement de la lecture"></progress>
     ${message ? `<p class="player-msg" role="status">${esc(message)}</p>` : ''}
     <div class="player-row">
@@ -328,7 +328,7 @@ function updateListenButton() {
   const button = view.querySelector('[data-action="listen"]');
   if (!button || !currentArticle) return;
   const saved = store.progress(store.articleId(currentArticle.lang, currentArticle.title));
-  button.textContent = saved ? `REPRENDRE LA VISITE · ${Math.round((saved.chunk / saved.total) * 100)} %` : 'VISITE GUIDÉE';
+  button.textContent = saved ? `REPRENDRE L'ÉCOUTE · ${Math.round((saved.chunk / saved.total) * 100)} %` : 'ÉCOUTER';
 }
 
 function languageName(code) {
@@ -353,7 +353,7 @@ function renderArticle(article) {
     <h1>${esc(article.title)}</h1>
     ${article.description ? `<p class="article-desc">${esc(article.description)}</p>` : ''}
     <div class="article-actions" lang="fr">
-      ${speechSupported() ? '<button class="key" type="button" data-action="listen">VISITE GUIDÉE</button>' : ''}
+      ${speechSupported() ? '<button class="key" type="button" data-action="listen">ÉCOUTER</button>' : ''}
       ${hasCoords ? `<a class="key key-quiet" target="_blank" rel="noopener noreferrer" href="https://www.google.com/maps/dir/?api=1&amp;destination=${article.lat},${article.lon}">Y ALLER</a>
       <button class="key key-quiet" type="button" data-action="explore">EXPLORER AUTOUR</button>` : ''}
       ${versions}
@@ -427,13 +427,30 @@ function radioGroup(name, legend, options, current) {
     <label class="choice"><input type="radio" name="${name}" value="${value}" ${String(value) === String(current) ? 'checked' : ''}><span>${esc(label)}</span></label>`).join('')}</div></fieldset>`;
 }
 
+const VOICE_SAMPLES = {
+  fr: 'Bonjour, ici Wikitel. La prise de la Bastille a eu lieu le 14 juillet 1789.',
+  it: 'Buongiorno, qui Wikitel. Roma fu fondata nel 753 avanti Cristo.',
+  en: 'Hello, this is Wikitel. The Battle of Hastings took place on 14 October 1066.',
+  de: 'Guten Tag, hier ist Wikitel. Die Berliner Mauer fiel am 9. November 1989.',
+  es: 'Hola, aquí Wikitel. Colón llegó a América el 12 de octubre de 1492.',
+};
+
 function voiceField(lang) {
   const voices = voicesFor(lang);
-  if (!voices.length) return '';
+  const name = languageName(lang);
+  if (!voices.length) {
+    return `<div class="field"><span class="legend">Voix (${esc(name)})</span>
+      <p class="notice">Aucune voix en ${esc(name)} n'est détectée sur cet appareil : la lecture risque d'utiliser un mauvais accent.<br>
+      Sur Android : Paramètres, puis recherchez « synthèse vocale », et installez les données de cette langue.<br>
+      Sur iPhone : Réglages, Accessibilité, Contenu énoncé, Voix.</p></div>`;
+  }
   const saved = store.settings().voices[lang] ?? '';
-  return `<label class="field"><span class="legend">Voix (${esc(languageName(lang))})</span>
+  const active = preferredVoice(lang, saved);
+  return `<div class="field"><label><span class="legend">Voix (${esc(name)})</span>
     <select data-voice-lang="${esc(lang)}"><option value="">Automatique</option>
-    ${voices.map((v) => `<option value="${esc(v.voiceURI)}" ${v.voiceURI === saved ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>`;
+    ${voices.map((v) => `<option value="${esc(v.voiceURI)}" ${v.voiceURI === saved ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>
+    <p class="voice-active">Voix utilisée : ${esc(active.name)} (${esc(active.lang)})</p>
+    ${VOICE_SAMPLES[lang] ? `<button class="key key-quiet" type="button" data-action="test-voice" data-lang="${esc(lang)}">TESTER LA VOIX</button>` : ''}</div>`;
 }
 
 function renderSettings() {
@@ -602,6 +619,10 @@ const actions = {
   'clear-history'() {
     if (confirm('Effacer tout l\'historique ?')) { store.clearHistory(); route(); }
   },
+  'test-voice'(el) {
+    const { lang } = el.dataset;
+    speakSample(VOICE_SAMPLES[lang], lang, { rate: store.settings().rate, voiceUri: store.settings().voices[lang] });
+  },
   'reload-route'() { route(); },
 };
 
@@ -639,6 +660,7 @@ document.addEventListener('change', (event) => {
   } else if (event.target.dataset.voiceLang) {
     const voices = { ...store.settings().voices, [event.target.dataset.voiceLang]: value };
     store.updateSettings({ voices });
+    renderSettings();
   }
 });
 

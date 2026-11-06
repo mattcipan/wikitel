@@ -18,7 +18,7 @@ Publier le dossier tel quel sur un hébergement statique en HTTPS : la géolocal
 
 - `js/places.js` : recherche, classement par thème et tri des lieux et des personnes
 - `js/article.js` : récupération, nettoyage et mise en forme des articles
-- `js/speech.js` : visite guidée (synthèse vocale du navigateur)
+- `js/speech.js` : écoute des articles (synthèse vocale du navigateur)
 - `js/store.js` : historique, favoris et réglages, sur l'appareil
 - `data/types.json` : table des types Wikidata, régénérée par `tools/build_types.py`
 
