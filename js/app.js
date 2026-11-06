@@ -369,6 +369,9 @@ function renderArticle(article) {
       Mise en forme adaptée par Wikitel. Touchez une image pour voir son auteur et sa licence.
     </footer>
   </article>`;
+  // Sur grand écran, la fiche tient dans la marge : autant la laisser ouverte.
+  const fiche = view.querySelector('.fiche');
+  if (fiche && matchMedia('(min-width: 62em)').matches) fiche.open = true;
   updateListenButton();
 }
 
@@ -458,7 +461,7 @@ function renderSettings() {
   document.title = 'Réglages · Wikitel';
   const s = store.settings();
   const langs = [...new Set(['fr', state.area?.local].filter(Boolean))];
-  view.innerHTML = `<div class="page">${backKey}<h1 class="pixel">RÉGLAGES</h1>
+  view.innerHTML = `<div class="page page-narrow">${backKey}<h1 class="pixel">RÉGLAGES</h1>
     <p class="settings-note">Vos choix sont enregistrés automatiquement.</p>
     ${radioGroup('radius', 'Périmètre de recherche', [[1, '1 km'], [2, '2 km'], [5, '5 km'], [10, '10 km']], s.radiusKm)}
     ${radioGroup('rate', 'Vitesse de la voix', [[0.8, '0,8×'], [1, '1×'], [1.25, '1,25×'], [1.5, '1,5×']], s.rate)}
@@ -472,7 +475,7 @@ function renderSettings() {
 
 function renderAccount() {
   document.title = 'Mon compte · Wikitel';
-  view.innerHTML = `<div class="page">${backKey}<h1 class="pixel">MON COMPTE</h1>
+  view.innerHTML = `<div class="page page-narrow">${backKey}<h1 class="pixel">MON COMPTE</h1>
     <p>La connexion et la synchronisation entre appareils arriveront dans la prochaine version.</p>
     <p>En attendant, votre historique et vos favoris sont enregistrés sur cet appareil. Ils pourront être repris à votre première connexion.</p>
     <div class="key-row"><a class="key" href="#/historique">HISTORIQUE</a><a class="key key-quiet" href="#/favoris">FAVORIS</a></div></div>`;
