@@ -7,14 +7,17 @@ const defaults = () => ({
   history: [],
   favorites: [],
   progress: {},
-  settings: { radiusKm: 5, rate: 1, voices: {}, theme: 'auto' },
+  settings: { radiusKm: 5, rate: 1.25, voices: {}, theme: 'auto', defaultRateMigrated: true },
 });
 
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY));
     const base = defaults();
-    return saved ? { ...base, ...saved, settings: { ...base.settings, ...saved.settings } } : base;
+    if (!saved) return base;
+    // L'ancienne vitesse par défaut était enregistrée comme un choix : on la remplace une seule fois.
+    if (!saved.settings?.defaultRateMigrated && saved.settings?.rate === 1) delete saved.settings.rate;
+    return { ...base, ...saved, settings: { ...base.settings, ...saved.settings, defaultRateMigrated: true } };
   } catch {
     return defaults();
   }
