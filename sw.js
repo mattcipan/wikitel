@@ -23,8 +23,9 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   if (url.origin === self.location.origin) {
-    // Réseau d'abord : une nouvelle version de l'appli s'applique dès qu'on est connecté.
-    event.respondWith(fetch(request)
+    // Réseau d'abord, en revalidant auprès du serveur : sans `no-cache`, le navigateur garderait
+    // l'ancienne version jusqu'à 10 minutes (durée imposée par GitHub Pages).
+    event.respondWith(fetch(request, { cache: 'no-cache' })
       .then((response) => {
         if (response.ok) { const copy = response.clone(); caches.open(VERSION).then((c) => c.put(request, copy)); }
         return response;
