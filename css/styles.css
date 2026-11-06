@@ -264,25 +264,27 @@ a { color: var(--link); }
 
 .hero { display: block; border: 2px solid var(--ink); background: var(--surface); color: inherit; text-decoration: none; }
 .hero:hover .hero-title { text-decoration: underline; }
-.hero-img { display: block; aspect-ratio: 16 / 9; overflow: hidden; border-bottom: 2px solid var(--ink); }
+.hero-img { position: relative; display: block; aspect-ratio: 16 / 9; overflow: hidden; border-bottom: 2px solid var(--ink); }
 .hero-img img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .hero-text { display: block; padding: 12px 14px 14px; }
 .hero-kicker { display: block; color: var(--accent); font: 400 1.25rem/1.1 var(--pixel); letter-spacing: 0.04em; }
 .hero-title { display: block; margin-top: 4px; font: 700 1.5rem/1.2 var(--serif); }
 .hero-desc { display: block; margin-top: 4px; color: var(--muted); }
 
-.mosaic {
-  display: block;
-  width: 100%;
-  height: 100%;
-  background-color: var(--line);
-  background-image:
-    linear-gradient(45deg, var(--muted) 25%, transparent 25%, transparent 75%, var(--muted) 75%),
-    linear-gradient(45deg, var(--muted) 25%, transparent 25%, transparent 75%, var(--muted) 75%);
-  background-size: 24px 24px;
-  background-position: 0 0, 12px 12px;
-  opacity: 0.45;
+.initial {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 400 3.25rem/1 var(--pixel);
+  background: var(--line);
+  color: var(--ink);
 }
+.initial-histoire { background: var(--c-histoire); color: var(--bg); }
+.initial-personnes { background: var(--c-personnes); color: var(--bg); }
+.initial-architecture { background: var(--c-architecture); color: var(--bg); }
+.initial-culture { background: var(--c-culture); color: var(--bg); }
+.initial-hero { background: var(--accent); color: var(--on-accent); font-size: clamp(6rem, 18vw, 12rem); }
 
 .tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 24px 0 12px; }
 .tab {

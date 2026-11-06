@@ -99,13 +99,23 @@ function renderIfHome() {
 
 /* ---------- Accueil ---------- */
 
+// Pour un article sans image : son initiale, sans tenir compte de l'article (« Le », « La »…).
+function initialOf(title) {
+  const name = title.replace(/^(le|la|les|l['’])\s*/i, '');
+  return (name.match(/\p{L}|\p{N}/u)?.[0] ?? '?').toUpperCase();
+}
+
+function initialBlock(title, tone = 'neutral') {
+  return `<span class="initial initial-${esc(tone)}" aria-hidden="true">${esc(initialOf(title))}</span>`;
+}
+
 function itemCard(item) {
   const km = state.center && item.kind !== 'person' ? distanceKm(state.center, item) : null;
   const place = item.kind === 'person' ? item.reason : formatDistance(km);
   const meta = item.views === undefined ? place : `${place} · ${formatViews(item.views)}`;
   const image = item.thumb
     ? `<img src="${esc(item.thumb)}" alt="" loading="lazy" decoding="async">`
-    : '<span class="mosaic" aria-hidden="true"></span>';
+    : initialBlock(item.title, state.tab);
   return `<li><a class="card" href="${esc(wikiRoute(item.lang, item.title))}">
     <span class="card-img">${image}</span>
     <span class="card-body">
@@ -212,7 +222,7 @@ function viewGroups(items, visible, separateArtists) {
 function heroBlock() {
   const hero = closestInteresting(state.area.places, state.center);
   if (!hero) return '';
-  const image = hero.thumb ? `<img src="${esc(hero.thumb)}" alt="" decoding="async">` : '<span class="mosaic" aria-hidden="true"></span>';
+  const image = hero.thumb ? `<img src="${esc(hero.thumb)}" alt="" decoding="async">` : initialBlock(hero.title, 'hero');
   return `<section aria-label="Le lieu intéressant le plus proche">
     <a class="hero" href="${esc(wikiRoute(hero.lang, hero.title))}">
       <span class="hero-img">${image}</span>
@@ -428,7 +438,7 @@ function renderStoredList(title, items, emptyMessage, footer = '') {
   document.title = `${title} · Wikitel`;
   view.innerHTML = `<div class="page">${backKey}<h1 class="pixel">${esc(title.toUpperCase())}</h1>
     ${items.length ? `<ul class="cards">${items.map((item) => `<li><a class="card" href="${esc(wikiRoute(item.lang, item.title))}">
-      <span class="card-img">${item.thumb ? `<img src="${esc(item.thumb)}" alt="" loading="lazy" decoding="async">` : '<span class="mosaic" aria-hidden="true"></span>'}</span>
+      <span class="card-img">${item.thumb ? `<img src="${esc(item.thumb)}" alt="" loading="lazy" decoding="async">` : initialBlock(item.title)}</span>
       <span class="card-body"><span class="card-title">${esc(item.title)}</span>
       ${item.description ? `<span class="card-desc">${esc(item.description)}</span>` : ''}
       <span class="card-meta">${new Date(item.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</span></span></a></li>`).join('')}</ul>${footer}`
