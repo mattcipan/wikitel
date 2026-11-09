@@ -19,6 +19,7 @@
   --c-architecture: #0a6a78;
   --c-culture: #8a6300;
   --c-randonnee: #3f6b1f;
+  --c-restaurants: #a8431a;
   --pixel: 'VT323', ui-monospace, 'SF Mono', Menlo, monospace;
   --serif: 'Iowan Old Style', Charter, Georgia, 'Noto Serif', serif;
   --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -41,6 +42,7 @@
     --c-architecture: #4fc7d6;
     --c-culture: #e6c34d;
   --c-randonnee: #9ccf6a;
+  --c-restaurants: #f0966f;
     color-scheme: dark;
   }
 }
@@ -60,6 +62,7 @@
   --c-architecture: #4fc7d6;
   --c-culture: #e6c34d;
   --c-randonnee: #9ccf6a;
+  --c-restaurants: #f0966f;
   color-scheme: dark;
 }
 
@@ -315,6 +318,7 @@ a { color: var(--link); }
 .tab-architecture { --tab-color: var(--c-architecture); }
 .tab-culture { --tab-color: var(--c-culture); }
 .tab-randonnee { --tab-color: var(--c-randonnee); }
+.tab-restaurants { --tab-color: var(--c-restaurants); }
 
 .sorter { display: flex; gap: 16px; margin-bottom: 8px; }
 .sorter button { min-height: 40px; padding: 4px 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 0.9375rem; cursor: pointer; }
@@ -446,7 +450,7 @@ a { color: var(--link); }
   .search-toggle { display: none; }
   .search input, .search.open input { display: block; position: static; width: 100%; }
   .search-results { left: 0; right: 0; }
-  .tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .article-body figure.mw-halign-right { float: right; clear: right; max-width: min(40%, 22rem); margin: 0.3em 0 1em 1.2em; }
   .article-body h2 { display: flow-root; }
 }
@@ -463,4 +467,8 @@ a { color: var(--link); }
 @media (prefers-reduced-motion: reduce) {
   .cursor { animation: none; }
   .key { transition: none; }
+}
+
+@media (min-width: 75em) {
+  .tabs { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }

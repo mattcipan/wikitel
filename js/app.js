@@ -1,5 +1,6 @@
 import { THEMES, VIEW_GROUPS, RADII_KM, discoverWithWidening, discoverPeople, closestInteresting, distanceKm, enrich, inTheme, isCity, loadViews, searchArticles } from './places.js';
 import { loadHikes } from './hikes.js';
+import { loadVenues } from './venues.js';
 import { loadArticle, narrationChunks, wikiRoute } from './article.js';
 import { Narrator, speechSupported, voicesFor, preferredVoice, speakSample, onVoicesReady } from './speech.js';
 import { articleUrl, NetworkError } from './api.js';
@@ -16,6 +17,8 @@ const state = {
   area: null,
   usedRadiusKm: null,
   hikes: null, // null | 'loading' | 'failed' | liste
+  venues: null, // null | 'loading' | 'failed' | liste
+  venueGroup: 'all', // all | restaurant | bar
   people: null,
   tab: 'histoire',
   sort: 'views', // views | near
@@ -60,6 +63,7 @@ export async function setCenter(center) {
   state.area = null;
   state.people = null;
   state.hikes = null;
+  state.venues = null;
   state.placeViews = 'loading';
   state.peopleViews = 'loading';
   state.shown = PAGE_SIZE;
@@ -210,13 +214,66 @@ function hikesPanel() {
     <p class="legal hike-credit">Vérifiez le balisage et les conditions sur place.${osmCredit}</p>`;
 }
 
+// Même principe que les randonnées : le serveur est lent, on ne l'interroge qu'à l'ouverture de l'onglet.
+function startVenues() {
+  const requestId = state.requestId;
+  state.venues = 'loading';
+  loadVenues(state.center)
+    .then((venues) => { if (requestId === state.requestId) { state.venues = venues; renderIfHome(); } })
+    .catch(() => { if (requestId === state.requestId) { state.venues = 'failed'; renderIfHome(); } });
+}
+
+function venueReviewsUrl(venue) {
+  const place = venue.city ?? state.center.label ?? state.area?.placeName;
+  const query = [venue.name, venue.street, place].filter(Boolean).join(', ');
+  return `https://www.google.com/maps/search/?${new URLSearchParams({ api: 1, query })}`;
+}
+
+function venueCard(venue) {
+  const facts = [venue.label, venue.cuisine, `à ${formatDistance(venue.distanceKm)}`].filter(Boolean).join(' · ');
+  const website = venue.website
+    ? `<a class="key key-quiet key-small" target="_blank" rel="noopener noreferrer" href="${esc(venue.website)}">SITE</a>`
+    : '';
+  return `<li class="hike">
+    <span class="card-title">${esc(venue.name)}</span>
+    <span class="card-meta">${esc(facts)}</span>
+    ${venue.hours ? `<span class="views-note">${esc(venue.hours)}</span>` : ''}
+    <span class="hike-actions">
+      <a class="key key-quiet key-small" target="_blank" rel="noopener noreferrer" href="${esc(venueReviewsUrl(venue))}">VOIR LES AVIS</a>
+      ${website}
+      <a class="key key-quiet key-small" target="_blank" rel="noopener noreferrer" href="https://www.google.com/maps/dir/?api=1&amp;destination=${venue.lat},${venue.lon}">Y ALLER</a>
+    </span>
+  </li>`;
+}
+
+function venuesPanel() {
+  if (state.venues === null) startVenues();
+  if (state.venues === 'loading') {
+    return `${loadingScreen('Recherche des restaurants et bars')}<p class="views-note hike-wait">Cela peut prendre jusqu'à une minute.</p>`;
+  }
+  if (state.venues === 'failed') {
+    return `<div class="screen-msg"><p>Le service de recherche ne répond pas pour le moment.</p>
+      <button class="key" type="button" data-action="venues-retry">RÉESSAYER</button></div>`;
+  }
+  if (!state.venues.length) return '<p class="empty">Aucun restaurant ni bar référencé à moins de 20 km.</p>';
+  const items = state.venues.filter((venue) => state.venueGroup === 'all' || venue.group === state.venueGroup);
+  const filter = [['all', 'Tous'], ['restaurant', 'Restaurants'], ['bar', 'Bars et cafés']].map(([group, label]) => (
+    `<button type="button" data-action="venue-group" data-group="${group}" aria-pressed="${state.venueGroup === group}">${label}</button>`
+  )).join('');
+  const list = items.length ? `<ul class="cards">${items.slice(0, state.shown).map(venueCard).join('')}</ul>` : '<p class="empty">Rien dans cette catégorie à proximité.</p>';
+  return `<div class="sorter" role="group" aria-label="Type d'établissement">${filter}</div>${list}
+    ${items.length > state.shown ? '<button class="key key-wide" data-action="more" type="button">SUITE</button>' : ''}
+    <p class="legal hike-credit">Classés du plus proche au plus loin. Les horaires peuvent être anciens, vérifiez-les avant de vous déplacer. Données © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">contributeurs OpenStreetMap</a>, licence ODbL.</p>`;
+}
+
 function themeList() {
   const { places } = state.area;
   const people = state.people ?? [];
   const tabs = THEMES.map((theme) => {
     const pending = !state.people && (theme.id === 'personnes' || theme.id === 'culture');
-    const count = theme.id === 'randonnee'
-      ? (Array.isArray(state.hikes) ? state.hikes.length : '')
+    const loaded = { randonnee: state.hikes, restaurants: state.venues }[theme.id];
+    const count = theme.id === 'randonnee' || theme.id === 'restaurants'
+      ? (Array.isArray(loaded) ? loaded.length : '')
       : inTheme(theme.id, places, people).length;
     const selected = state.tab === theme.id;
     return `<button class="tab tab-${theme.id}" role="tab" type="button" aria-selected="${selected}" data-action="tab" data-tab="${theme.id}">
@@ -224,6 +281,9 @@ function themeList() {
   }).join('');
   if (state.tab === 'randonnee') {
     return `<div class="tabs" role="tablist" aria-label="Thèmes">${tabs}</div><div class="tab-panel" role="tabpanel">${hikesPanel()}</div>`;
+  }
+  if (state.tab === 'restaurants') {
+    return `<div class="tabs" role="tablist" aria-label="Thèmes">${tabs}</div><div class="tab-panel" role="tabpanel">${venuesPanel()}</div>`;
   }
 
   const isPeople = state.tab === 'personnes';
@@ -838,6 +898,8 @@ const actions = {
   },
   'reload-route'() { route(); },
   'hikes-retry'() { state.hikes = null; renderHome(); },
+  'venues-retry'() { state.venues = null; renderHome(); },
+  'venue-group'(el) { state.venueGroup = el.dataset.group; state.shown = PAGE_SIZE; renderHome(); },
   'trip-create'() {
     const created = createTripFrom(document.getElementById('new-trip-name'));
     if (created) location.hash = `#/voyages/${created.id}`;
@@ -952,7 +1014,7 @@ onVoicesReady(() => { if (currentRoute === '#/reglages') renderSettings(); });
 
 // Sur mobile, revenir dans l'appli ne recharge pas la page : une nouvelle publication passerait inaperçue.
 let loadedVersion = null;
-const APP_FILES = ['index.html', 'css/styles.css', 'js/app.js', 'js/api.js', 'js/article.js', 'js/hikes.js', 'js/places.js', 'js/speech.js', 'js/store.js', 'data/types.json', 'data/geotrek-sources.json'];
+const APP_FILES = ['index.html', 'css/styles.css', 'js/app.js', 'js/api.js', 'js/article.js', 'js/hikes.js', 'js/overpass.js', 'js/places.js', 'js/speech.js', 'js/venues.js', 'js/store.js', 'data/types.json', 'data/geotrek-sources.json'];
 
 async function publishedVersion() {
   try {
