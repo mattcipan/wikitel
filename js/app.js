@@ -2,7 +2,7 @@ import { THEMES, VIEW_GROUPS, RADII_KM, discoverWithWidening, discoverPeople, cl
 import { loadHikes } from './hikes.js';
 import { loadArticle, narrationChunks, wikiRoute } from './article.js';
 import { Narrator, speechSupported, voicesFor, preferredVoice, speakSample, onVoicesReady } from './speech.js';
-import { articleUrl } from './api.js';
+import { articleUrl, NetworkError } from './api.js';
 import * as store from './store.js';
 
 const PAGE_SIZE = 12;
@@ -477,9 +477,11 @@ async function openArticle(lang, title) {
     store.addHistory(article);
     const fragment = scrollByRoute.get(route);
     if (fragment) scrollTo(0, fragment);
-  } catch {
+  } catch (err) {
     if (route !== currentRoute) return;
-    view.innerHTML = `<div class="screen-msg"><h1 class="pixel">PAS DE CONNEXION</h1><p>L'article n'a pas pu être chargé. Il n'est pas disponible hors connexion.</p><button class="key" data-action="reload-route" type="button">RÉESSAYER</button></div>`;
+    view.innerHTML = err instanceof NetworkError
+      ? `<div class="screen-msg"><h1 class="pixel">PAS DE CONNEXION</h1><p>L'article n'a pas pu être chargé. Il n'est pas disponible hors connexion.</p><button class="key" data-action="reload-route" type="button">RÉESSAYER</button></div>`
+      : `<div class="screen-msg"><h1 class="pixel">ARTICLE ILLISIBLE</h1><p>Wikitel n'arrive pas à mettre en forme cet article.</p><a class="key" href="${esc(articleUrl(lang, title))}" target="_blank" rel="noopener noreferrer">LIRE SUR WIKIPÉDIA</a></div>`;
   }
 }
 

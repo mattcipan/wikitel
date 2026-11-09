@@ -108,7 +108,8 @@ function layout(root) {
     fiche.innerHTML = '<summary>Fiche</summary>';
     holder.replaceWith(fiche);
     fiche.append(holder);
-    const firstParagraph = [...root.querySelectorAll('p')].find((p) => p.textContent.trim().length > 40);
+    // Un paragraphe de la fiche elle-même ne convient pas : on ne peut pas la placer dans son propre contenu.
+    const firstParagraph = [...root.querySelectorAll('p')].find((p) => !fiche.contains(p) && p.textContent.trim().length > 40);
     if (firstParagraph) firstParagraph.after(fiche);
   }
 
