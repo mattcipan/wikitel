@@ -73,7 +73,7 @@ export async function setCenter(center) {
   state.step = 'Connexion à Wikipédia';
   renderIfHome();
   try {
-    const { area, radiusKm } = await discoverWithWidening(center, store.settings().radiusKm, (step) => { state.step = step; renderIfHome(); });
+    const { area, radiusKm } = await discoverWithWidening(center, center.radiusKm ?? store.settings().radiusKm, (step) => { state.step = step; renderIfHome(); });
     if (requestId !== state.requestId) return;
     state.area = area;
     state.usedRadiusKm = radiusKm;
@@ -148,7 +148,7 @@ function currentPlace() {
 function statusLine() {
   const { center, area } = state;
   if (!center) return '';
-  const chosen = store.settings().radiusKm;
+  const chosen = center.radiusKm ?? store.settings().radiusKm;
   const radius = (area && state.usedRadiusKm) || chosen;
   const widened = radius !== chosen ? ' <span class="widened">(élargi automatiquement)</span>' : '';
   const place = center.label ?? area?.placeName ?? 'votre position';
@@ -791,7 +791,10 @@ async function renderMapView() {
   view.innerHTML = `<div class="map-view">
     <div class="map-main">
       <div class="sorter map-bar" id="map-bar" role="group" aria-label="Afficher sur la carte">${mapLayerBar()}</div>
-      <div class="map" id="map" role="region" aria-label="Carte des lieux"></div>
+      <div class="map-wrap">
+        <div class="map" id="map" role="region" aria-label="Carte des lieux"></div>
+        <button class="key key-small map-search" id="map-search" type="button" data-action="map-search-here" hidden>CHERCHER DANS CETTE ZONE</button>
+      </div>
     </div>
     <section class="itinerary" id="itinerary" aria-label="Itinéraire"></section>
   </div>`;
@@ -814,6 +817,7 @@ async function renderMapView() {
   }).addTo(mapInstance);
   mapInstance.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener noreferrer">Leaflet</a>');
   mapLayer = L.layerGroup().addTo(mapInstance);
+  mapInstance.on('moveend', updateSearchButton);
   drawMap();
   completeFavoriteCoords();
 }
@@ -824,6 +828,31 @@ function refreshMap() {
   const bar = document.getElementById('map-bar');
   if (bar) bar.innerHTML = mapLayerBar();
   drawMap();
+  updateSearchButton();
+}
+
+// Rayon de la zone affichée : la moitié du plus petit côté de la carte.
+function visibleRadiusKm() {
+  const bounds = mapInstance.getBounds();
+  const middle = mapInstance.getCenter();
+  const height = distanceKm({ lat: bounds.getNorth(), lon: middle.lng }, { lat: bounds.getSouth(), lon: middle.lng });
+  const width = distanceKm({ lat: middle.lat, lon: bounds.getWest() }, { lat: middle.lat, lon: bounds.getEast() });
+  return Math.min(height, width) / 2;
+}
+
+// Le bouton apparaît quand la carte montre surtout autre chose que la zone déjà explorée.
+function updateSearchButton() {
+  const button = document.getElementById('map-search');
+  if (!button || !mapInstance) return;
+  const middle = mapInstance.getCenter();
+  const viewKm = visibleRadiusKm();
+  const searchedKm = state.usedRadiusKm ?? store.settings().radiusKm;
+  const moved = distanceKm(state.center, { lat: middle.lat, lon: middle.lng }) > viewKm * 0.4;
+  const zoomedOut = viewKm > searchedKm * 2 && searchedKm < RADII_KM[RADII_KM.length - 1];
+  const loading = state.status === 'loading';
+  button.disabled = loading;
+  button.textContent = loading ? 'RECHERCHE EN COURS…' : 'CHERCHER DANS CETTE ZONE';
+  button.hidden = !loading && !(moved || zoomedOut);
 }
 
 async function completeFavoriteCoords() {
@@ -1167,6 +1196,13 @@ const actions = {
     speakSample(VOICE_SAMPLES[lang], lang, { rate: store.settings().rate, voiceUri: store.settings().voices[lang] });
   },
   'reload-route'() { route(); },
+  'map-search-here'(el) {
+    if (!mapInstance) return;
+    const middle = mapInstance.getCenter();
+    const viewKm = visibleRadiusKm();
+    const radiusKm = RADII_KM.find((km) => km >= viewKm) ?? RADII_KM[RADII_KM.length - 1];
+    setCenter({ lat: middle.lat, lon: middle.lng, radiusKm, source: 'manual' });
+  },
   'map-layer'(el) {
     const { layer } = el.dataset;
     mapShown[layer] = !mapShown[layer];
