@@ -7,8 +7,9 @@ const defaults = () => ({
   history: [],
   favorites: [],
   trips: [],
+  itinerary: [],
   progress: {},
-  settings: { radiusKm: 5, rate: 1, voices: {}, theme: 'auto', rateResetToNormal: true },
+  settings: { radiusKm: 5, rate: 1, voices: {}, theme: 'auto', rateResetToNormal: true, travelMode: 'walking' },
 });
 
 function load() {
@@ -37,8 +38,10 @@ function save() {
 export const articleId = (lang, title) => `${lang}:${title}`;
 
 function entry(article) {
-  const { lang, title, description = '', thumb = '' } = article;
-  return { id: articleId(lang, title), lang, title, description, thumb, at: Date.now() };
+  const { lang, title, description = '', thumb = '', lat, lon } = article;
+  const item = { id: articleId(lang, title), lang, title, description, thumb, at: Date.now() };
+  if (Number.isFinite(lat) && Number.isFinite(lon)) Object.assign(item, { lat, lon });
+  return item;
 }
 
 export const settings = () => data.settings;
@@ -67,6 +70,40 @@ export function toggleFavorite(article) {
   data.favorites = exists ? data.favorites.filter((f) => f.id !== item.id) : [item, ...data.favorites];
   save();
   return !exists;
+}
+
+// Les favoris enregistrés avant la carte n'ont pas de coordonnées : on les complète après coup.
+// `null` signale un article sans coordonnées, pour ne pas le redemander.
+export function setFavoriteCoords(found) {
+  for (const favorite of data.favorites) {
+    if (!(favorite.id in found)) continue;
+    const point = found[favorite.id];
+    if (point) Object.assign(favorite, { lat: point.lat, lon: point.lon });
+    else favorite.noCoords = true;
+  }
+  save();
+}
+
+// Itinéraire de la carte : une liste d'étapes { id, name, lat, lon }, dans l'ordre de visite.
+export const itinerary = () => data.itinerary;
+export const inItinerary = (id) => data.itinerary.some((s) => s.id === id);
+export function toggleStop({ id, name, lat, lon }) {
+  const exists = inItinerary(id);
+  data.itinerary = exists ? data.itinerary.filter((s) => s.id !== id) : [...data.itinerary, { id, name, lat, lon }];
+  save();
+  return !exists;
+}
+export function setItinerary(stops) {
+  data.itinerary = stops;
+  save();
+}
+export function moveStop(id, offset) {
+  const stops = data.itinerary;
+  const from = stops.findIndex((s) => s.id === id);
+  const to = from + offset;
+  if (from < 0 || to < 0 || to >= stops.length) return;
+  stops.splice(to, 0, stops.splice(from, 1)[0]);
+  save();
 }
 
 const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;

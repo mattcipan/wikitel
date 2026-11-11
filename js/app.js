@@ -1,9 +1,10 @@
 import { THEMES, VIEW_GROUPS, RADII_KM, discoverWithWidening, discoverPeople, closestInteresting, distanceKm, enrich, inTheme, isCity, loadViews, searchArticles } from './places.js';
 import { loadHikes } from './hikes.js';
 import { loadVenues } from './venues.js';
+import { MAX_ROUTE_STOPS, googleRouteUrl, loadLeaflet, pathKm, shortestOrder, TILE_URL, zoomForRadius } from './map.js';
 import { loadArticle, narrationChunks, wikiRoute } from './article.js';
 import { Narrator, speechSupported, voicesFor, preferredVoice, speakSample, onVoicesReady } from './speech.js';
-import { articleUrl, NetworkError } from './api.js';
+import { articleUrl, chunk, NetworkError, wikipedia } from './api.js';
 import * as store from './store.js';
 
 const PAGE_SIZE = 12;
@@ -104,6 +105,7 @@ export async function setCenter(center) {
 
 function renderIfHome() {
   if (currentRoute === '#/') renderHome();
+  else if (currentRoute === '#/carte') refreshMap();
 }
 
 /* ---------- Accueil ---------- */
@@ -153,7 +155,7 @@ function statusLine() {
   const article = center.title ? `<a href="${esc(wikiRoute(center.lang, center.title))}">Lire l'article</a>` : '';
   const addToTrip = currentPlace() ? '<button class="linkish" data-action="trip-sheet" type="button">Ajouter à un voyage</button>' : '';
   const back = center.source === 'manual' ? `${article} <button class="linkish" data-action="use-gps" type="button">Revenir à ma position</button>` : '';
-  return `<p class="status"><span class="dot" aria-hidden="true"></span>Autour de <strong>${esc(place)}</strong> · <a href="#/reglages">${radius} km</a>${widened} ${addToTrip} ${back}</p>`;
+  return `<p class="status"><span class="dot" aria-hidden="true"></span>Autour de <strong>${esc(place)}</strong> · <a href="#/reglages">${radius} km</a>${widened} · <a href="#/carte">Carte</a> ${addToTrip} ${back}</p>`;
 }
 
 function loadingScreen(message) {
@@ -752,10 +754,259 @@ async function openRandom() {
   location.replace(wikiRoute(pick.lang, pick.title));
 }
 
+/* ---------- Carte ---------- */
+
+let mapInstance = null;
+let mapLayer = null;
+const mapPoints = new Map();
+const mapShown = { lieux: true, favoris: true, restaurants: false, randonnee: false };
+let favoriteCoordsAsked = false;
+
+function closeMap() {
+  mapInstance?.remove();
+  mapInstance = null;
+  mapLayer = null;
+}
+
+function mapLayerBar() {
+  const loading = (value) => (value === 'loading' ? '…' : '');
+  const chips = [
+    ['lieux', 'Lieux', state.status === 'loading' ? '…' : ''], ['favoris', 'Favoris', ''],
+    ['restaurants', 'Restaurants / Bars', loading(state.venues)], ['randonnee', 'Randonnées', loading(state.hikes)],
+  ];
+  return chips.map(([layer, label, hint]) => (
+    `<button type="button" data-action="map-layer" data-layer="${layer}" aria-pressed="${mapShown[layer]}">${label}${hint}</button>`
+  )).join('');
+}
+
+async function renderMapView() {
+  document.title = 'Carte · Wikitel';
+  closeMap();
+  if (!state.center) {
+    view.innerHTML = ['idle', 'locating'].includes(state.status) ? loadingScreen('Localisation en cours')
+      : `<div class="screen-msg"><h1 class="pixel">OÙ ÊTES-VOUS ?</h1><p>La carte a besoin de votre position, ou d'une ville choisie.</p>
+        <div class="key-row"><button class="key" type="button" data-action="focus-search">CHERCHER UNE VILLE</button></div></div>`;
+    return;
+  }
+  view.innerHTML = `<div class="map-view">
+    <div class="map-main">
+      <div class="sorter map-bar" id="map-bar" role="group" aria-label="Afficher sur la carte">${mapLayerBar()}</div>
+      <div class="map" id="map" role="region" aria-label="Carte des lieux"></div>
+    </div>
+    <section class="itinerary" id="itinerary" aria-label="Itinéraire"></section>
+  </div>`;
+  renderItinerary();
+  let L;
+  try {
+    L = await loadLeaflet();
+  } catch {
+    const box = document.getElementById('map');
+    if (box) box.innerHTML = '<p class="empty">La carte ne peut pas se charger sans connexion.</p>';
+    return;
+  }
+  const box = document.getElementById('map');
+  if (currentRoute !== '#/carte' || !box || mapInstance) return;
+  const radius = state.usedRadiusKm ?? store.settings().radiusKm;
+  mapInstance = L.map(box).setView([state.center.lat, state.center.lon], zoomForRadius(radius));
+  L.tileLayer(TILE_URL, {
+    maxZoom: 19,
+    attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">contributeurs OpenStreetMap</a>',
+  }).addTo(mapInstance);
+  mapInstance.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener noreferrer">Leaflet</a>');
+  mapLayer = L.layerGroup().addTo(mapInstance);
+  drawMap();
+  completeFavoriteCoords();
+}
+
+// Appelé quand les lieux, restaurants ou randonnées finissent de charger.
+function refreshMap() {
+  if (!mapInstance) { renderMapView(); return; }
+  const bar = document.getElementById('map-bar');
+  if (bar) bar.innerHTML = mapLayerBar();
+  drawMap();
+}
+
+async function completeFavoriteCoords() {
+  if (favoriteCoordsAsked) return;
+  favoriteCoordsAsked = true;
+  const missing = store.favorites().filter((f) => f.lat === undefined && !f.noCoords);
+  if (!missing.length) return;
+  const found = {};
+  const byLang = Map.groupBy ? Map.groupBy(missing, (f) => f.lang) : missing.reduce((m, f) => m.set(f.lang, [...(m.get(f.lang) ?? []), f]), new Map());
+  try {
+    for (const [lang, list] of byLang) {
+      for (const batch of chunk(list, 50)) {
+        const data = await wikipedia(lang, { action: 'query', prop: 'coordinates', titles: batch.map((f) => f.title).join('|') });
+        const pages = new Map((data.query?.pages ?? []).map((p) => [p.title, p]));
+        for (const favorite of batch) {
+          const coords = pages.get(favorite.title)?.coordinates?.[0];
+          found[favorite.id] = coords ? { lat: coords.lat, lon: coords.lon } : null;
+        }
+      }
+    }
+  } catch {
+    favoriteCoordsAsked = false; // Réessayé à la prochaine ouverture de la carte.
+  }
+  store.setFavoriteCoords(found);
+  if (mapInstance) drawMap();
+}
+
+function articlePoint(item) {
+  const id = store.articleId(item.lang, item.title);
+  return {
+    id, kind: 'article', name: item.title, lat: item.lat, lon: item.lon, lang: item.lang, title: item.title,
+    description: item.description, thumb: item.thumb, meta: item.description ?? '',
+    links: [{ href: wikiRoute(item.lang, item.title), label: 'LIRE', internal: true }],
+  };
+}
+
+function popupHtml(point) {
+  const inRoute = store.inItinerary(point.id);
+  const favorite = point.kind === 'article'
+    ? `<button class="key key-quiet key-small" type="button" data-action="map-favorite" data-id="${esc(point.id)}">${store.isFavorite(point.lang, point.title) ? '★ FAVORI' : '☆ FAVORI'}</button>`
+    : '';
+  const links = point.links.map((link) => `<a class="key key-quiet key-small" href="${esc(link.href)}"${link.internal ? '' : ' target="_blank" rel="noopener noreferrer"'}>${link.label}</a>`).join('');
+  return `<div class="map-popup">
+    <strong class="map-popup-title">${esc(point.name)}</strong>
+    ${point.meta ? `<span class="map-popup-meta">${esc(point.meta)}</span>` : ''}
+    <span class="map-popup-keys">
+      <button class="key key-small" type="button" data-action="map-stop" data-id="${esc(point.id)}">${inRoute ? '− ÉTAPE' : '+ ÉTAPE'}</button>
+      ${favorite}${links}
+    </span>
+  </div>`;
+}
+
+function drawMap() {
+  if (!mapLayer) return;
+  const { L } = window;
+  const css = getComputedStyle(document.documentElement);
+  const token = (name) => css.getPropertyValue(name).trim();
+  const favoriteIds = new Set(store.favorites().map((f) => f.id));
+  const stops = store.itinerary();
+  const stopIds = new Set(stops.map((s) => s.id));
+  mapLayer.clearLayers();
+  mapPoints.clear();
+
+  const add = (point, marker) => {
+    mapPoints.set(point.id, point);
+    if (stopIds.has(point.id)) return; // Affiché plus bas, avec son numéro.
+    marker.bindPopup(() => popupHtml(point), { maxWidth: 280 }).addTo(mapLayer);
+  };
+  const dot = (point, color, radius = 7) => L.circleMarker([point.lat, point.lon], {
+    radius, color: token('--ink'), weight: 1.5, fillColor: color, fillOpacity: 0.95,
+  });
+
+  L.circleMarker([state.center.lat, state.center.lon], {
+    radius: 9, color: token('--ink'), weight: 3, fillColor: token('--accent'), fillOpacity: 1, interactive: false,
+  }).addTo(mapLayer);
+
+  if (mapShown.lieux && state.area) {
+    for (const place of state.area.places) {
+      const theme = THEMES.find((t) => t.flag && place.flags & t.flag);
+      const point = articlePoint(place);
+      if (!theme || favoriteIds.has(point.id)) continue;
+      add(point, dot(point, token(`--c-${theme.id}`)));
+    }
+  }
+  if (mapShown.restaurants && Array.isArray(state.venues)) {
+    for (const venue of state.venues) {
+      const point = {
+        id: `venue:${venue.id}`, kind: 'venue', name: venue.name, lat: venue.lat, lon: venue.lon,
+        meta: [venue.label, venue.cuisine].filter(Boolean).join(' · '),
+        links: [{ href: venueReviewsUrl(venue), label: 'AVIS' }],
+      };
+      add(point, dot(point, token('--c-restaurants'), 5));
+    }
+  }
+  if (mapShown.randonnee && Array.isArray(state.hikes)) {
+    for (const hike of state.hikes) {
+      const official = hike.kind === 'geotrek';
+      const point = {
+        id: `hike:${hike.id}`, kind: 'hike', name: hike.name, lat: hike.lat, lon: hike.lon,
+        meta: `${formatDistance(hike.lengthKm)}${hike.loop ? ' · boucle' : ''} · ${official ? 'départ' : 'point du sentier'}`,
+        links: [{ href: official ? hike.url : `https://www.openstreetmap.org/relation/${encodeURIComponent(hike.id)}`, label: official ? 'FICHE' : 'TRACÉ' }],
+      };
+      add(point, dot(point, token('--c-randonnee'), 8));
+    }
+  }
+  if (mapShown.favoris) {
+    for (const favorite of store.favorites()) {
+      if (favorite.lat === undefined) continue;
+      const point = articlePoint(favorite);
+      add(point, L.marker([point.lat, point.lon], {
+        icon: L.divIcon({ className: 'map-star', html: '★', iconSize: [30, 30] }), title: point.name, zIndexOffset: 500,
+      }));
+    }
+  }
+  if (stops.length) {
+    L.polyline([[state.center.lat, state.center.lon], ...stops.map((s) => [s.lat, s.lon])], {
+      color: token('--accent'), weight: 4, dashArray: '8 8', interactive: false,
+    }).addTo(mapLayer);
+    stops.forEach((stop, index) => {
+      const point = mapPoints.get(stop.id) ?? { ...stop, kind: 'stop', meta: '', links: [] };
+      mapPoints.set(stop.id, point);
+      L.marker([stop.lat, stop.lon], {
+        icon: L.divIcon({ className: 'map-stop', html: String(index + 1), iconSize: [30, 30] }), title: stop.name, zIndexOffset: 1000,
+      }).bindPopup(() => popupHtml(point), { maxWidth: 280 }).addTo(mapLayer);
+    });
+  }
+}
+
+function renderItinerary() {
+  const box = document.getElementById('itinerary');
+  if (!box) return;
+  const stops = store.itinerary();
+  const mode = store.settings().travelMode;
+  const nearbyFavorites = store.favorites().filter((f) => f.lat !== undefined && !store.inItinerary(f.id)
+    && distanceKm(state.center, f) <= Math.max(20, state.usedRadiusKm ?? 0));
+  const addFavorites = nearbyFavorites.length
+    ? `<button class="key key-quiet key-wide" type="button" data-action="route-favorites">AJOUTER MES FAVORIS PROCHES (${nearbyFavorites.length})</button>`
+    : '';
+  if (!stops.length) {
+    box.innerHTML = `<h2 class="group-title">Itinéraire</h2>
+      <p class="views-note">Touchez un lieu sur la carte, puis « + ÉTAPE ». Les favoris apparaissent en étoile.</p>${addFavorites}`;
+    return;
+  }
+  const km = pathKm([state.center, ...stops]);
+  const last = stops.length - 1;
+  const rows = stops.map((stop, index) => `<li class="stop">
+      <span class="stop-number" aria-hidden="true">${index + 1}</span>
+      <button class="stop-name" type="button" data-action="route-focus" data-id="${esc(stop.id)}">${esc(stop.name)}</button>
+      <button class="icon-btn" type="button" data-action="route-move" data-id="${esc(stop.id)}" data-offset="-1" aria-label="Monter ${esc(stop.name)}" ${index === 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 7 7 8H5z"/></svg></button>
+      <button class="icon-btn" type="button" data-action="route-move" data-id="${esc(stop.id)}" data-offset="1" aria-label="Descendre ${esc(stop.name)}" ${index === last ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 17-7-8h14z"/></svg></button>
+      <button class="icon-btn" type="button" data-action="route-remove" data-id="${esc(stop.id)}" aria-label="Retirer ${esc(stop.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4z"/></svg></button>
+    </li>`).join('');
+  // Avec le GPS, Google Maps part de la position du téléphone ; pour une ville choisie, de la première étape.
+  const origin = state.center.source === 'gps' || stops.length < 2 ? null : stops[0];
+  const routeStops = origin ? stops.slice(1) : stops;
+  const limit = origin ? MAX_ROUTE_STOPS + 1 : MAX_ROUTE_STOPS;
+  const link = routeStops.length
+    ? `<a class="key key-wide" target="_blank" rel="noopener noreferrer" href="${esc(googleRouteUrl(routeStops, mode, origin))}">OUVRIR DANS GOOGLE MAPS</a>`
+    : '';
+  box.innerHTML = `<h2 class="group-title">Itinéraire<span class="group-hint">${stops.length} étape${stops.length > 1 ? 's' : ''} · ${esc(formatDistance(km))} à vol d'oiseau</span></h2>
+    <ol class="stops">${rows}</ol>
+    <div class="sorter" role="group" aria-label="Moyen de transport">
+      <button type="button" data-action="route-mode" data-mode="walking" aria-pressed="${mode === 'walking'}">À pied</button>
+      <button type="button" data-action="route-mode" data-mode="driving" aria-pressed="${mode === 'driving'}">En voiture</button>
+      <button type="button" data-action="route-mode" data-mode="bicycling" aria-pressed="${mode === 'bicycling'}">À vélo</button>
+    </div>
+    ${stops.length > 1 ? '<button class="key key-quiet key-wide" type="button" data-action="route-optimize">ORDRE LE PLUS COURT</button>' : ''}
+    ${link}
+    ${stops.length > limit ? `<p class="legal">Google Maps limite l'itinéraire aux ${limit} premières étapes.</p>` : ''}
+    ${addFavorites}
+    <button class="linkish danger" type="button" data-action="route-clear">Vider l'itinéraire</button>`;
+}
+
+function itineraryChanged() {
+  renderItinerary();
+  drawMap();
+}
+
 /* ---------- Routeur ---------- */
 
 function route() {
   scrollByRoute.set(currentRoute, scrollY);
+  closeMap();
   stopNarrator();
   currentArticle = null;
   closeSearch();
@@ -771,6 +1022,7 @@ function route() {
     if (hash === '#/hasard') openRandom();
     else if (hash === '#/historique') renderStoredList('Historique', store.history(), 'Les articles que vous ouvrez apparaîtront ici.', '<button class="key key-quiet key-wide" type="button" data-action="clear-history">EFFACER L\'HISTORIQUE</button>');
     else if (hash === '#/favoris') renderStoredList('Favoris', store.favorites(), 'Ajoutez un article à vos favoris pour le retrouver ici.');
+    else if (hash === '#/carte') renderMapView();
     else if (hash === '#/voyages') renderTrips();
     else if (hash.startsWith('#/voyages/')) renderTrip(hash.slice('#/voyages/'.length));
     else if (hash === '#/reglages') renderSettings();
@@ -897,6 +1149,46 @@ const actions = {
     speakSample(VOICE_SAMPLES[lang], lang, { rate: store.settings().rate, voiceUri: store.settings().voices[lang] });
   },
   'reload-route'() { route(); },
+  'map-layer'(el) {
+    const { layer } = el.dataset;
+    mapShown[layer] = !mapShown[layer];
+    if (mapShown[layer] && layer === 'restaurants' && state.venues === null) startVenues();
+    if (mapShown[layer] && layer === 'randonnee' && state.hikes === null) startHikes();
+    refreshMap();
+  },
+  'map-stop'(el) {
+    const point = mapPoints.get(el.dataset.id);
+    if (!point) return;
+    store.toggleStop(point);
+    mapInstance?.closePopup();
+    itineraryChanged();
+  },
+  'map-favorite'(el) {
+    const point = mapPoints.get(el.dataset.id);
+    if (!point) return;
+    store.toggleFavorite(point);
+    mapInstance?.closePopup();
+    itineraryChanged();
+  },
+  'route-focus'(el) {
+    const stop = store.itinerary().find((s) => s.id === el.dataset.id);
+    if (stop && mapInstance) {
+      mapInstance.setView([stop.lat, stop.lon], Math.max(mapInstance.getZoom(), 16));
+      document.getElementById('map')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  },
+  'route-move'(el) { store.moveStop(el.dataset.id, Number(el.dataset.offset)); itineraryChanged(); },
+  'route-remove'(el) { store.toggleStop({ id: el.dataset.id }); itineraryChanged(); },
+  'route-optimize'() { store.setItinerary(shortestOrder(state.center, store.itinerary())); itineraryChanged(); },
+  'route-mode'(el) { store.updateSettings({ travelMode: el.dataset.mode }); renderItinerary(); },
+  'route-clear'() { if (confirm('Vider l\'itinéraire ?')) { store.setItinerary([]); itineraryChanged(); } },
+  'route-favorites'() {
+    const radius = Math.max(20, state.usedRadiusKm ?? 0);
+    store.favorites()
+      .filter((f) => f.lat !== undefined && !store.inItinerary(f.id) && distanceKm(state.center, f) <= radius)
+      .forEach((f) => store.toggleStop({ id: f.id, name: f.title, lat: f.lat, lon: f.lon }));
+    itineraryChanged();
+  },
   'hikes-retry'() { state.hikes = null; renderHome(); },
   'venues-retry'() { state.venues = null; renderHome(); },
   'venue-group'(el) { state.venueGroup = el.dataset.group; state.shown = PAGE_SIZE; renderHome(); },
@@ -1014,7 +1306,7 @@ onVoicesReady(() => { if (currentRoute === '#/reglages') renderSettings(); });
 
 // Sur mobile, revenir dans l'appli ne recharge pas la page : une nouvelle publication passerait inaperçue.
 let loadedVersion = null;
-const APP_FILES = ['index.html', 'css/styles.css', 'js/app.js', 'js/api.js', 'js/article.js', 'js/hikes.js', 'js/overpass.js', 'js/places.js', 'js/speech.js', 'js/venues.js', 'js/store.js', 'data/types.json', 'data/geotrek-sources.json'];
+const APP_FILES = ['index.html', 'css/styles.css', 'js/app.js', 'js/api.js', 'js/article.js', 'js/hikes.js', 'js/map.js', 'js/overpass.js', 'js/places.js', 'js/speech.js', 'js/venues.js', 'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'js/store.js', 'data/types.json', 'data/geotrek-sources.json'];
 
 async function publishedVersion() {
   try {
