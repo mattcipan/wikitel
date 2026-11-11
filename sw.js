@@ -3,8 +3,8 @@ const VERSION = 'wikitel-v1';
 const ARTICLES = 'wikitel-articles-v1';
 const ARTICLE_LIMIT = 30;
 const SHELL = [
-  './', 'index.html', 'manifest.webmanifest', 'css/styles.css', 'data/types.json', 'data/geotrek-sources.json', 'assets/vt323.woff2', 'assets/icon.svg', 'assets/icon-192.png',
-  'js/app.js', 'js/api.js', 'js/article.js', 'js/hikes.js', 'js/map.js', 'js/overpass.js', 'js/places.js', 'js/speech.js', 'js/venues.js',
+  './', 'index.html', 'manifest.webmanifest', 'css/styles.css', 'data/types.json', 'assets/vt323.woff2', 'assets/icon.svg', 'assets/icon-192.png',
+  'js/app.js', 'js/api.js', 'js/article.js', 'js/map.js', 'js/places.js', 'js/speech.js',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'js/store.js',
 ];
 

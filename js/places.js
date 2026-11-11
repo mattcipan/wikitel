@@ -9,8 +9,6 @@ export const THEMES = [
   { id: 'personnes', label: 'Personnes célèbres' },
   { id: 'architecture', label: 'Architecture', flag: F.ARCHITECTURE },
   { id: 'culture', label: 'Culture', flag: F.CULTURE },
-  { id: 'randonnee', label: 'Randonnées' },
-  { id: 'restaurants', label: 'Restaurants / Bars' },
 ];
 
 const GEO_LIMIT = 200;

@@ -19,11 +19,7 @@ Publier le dossier tel quel sur un hébergement statique en HTTPS : la géolocal
 ## Organisation
 
 - `js/places.js` : recherche, classement par thème et tri des lieux et des personnes
-- `js/hikes.js` : randonnées depuis les sites Geotrek (faits seulement), avec OpenStreetMap en complément
-- `js/venues.js` : restaurants et bars depuis OpenStreetMap, avec un lien vers Google Maps pour les avis
-- `js/overpass.js` : accès au serveur Overpass
 - `js/map.js` : carte (Leaflet, dans `vendor/leaflet`) et ordre de visite le plus court pour l'itinéraire
-- `data/geotrek-sources.json` et `relay/worker.js` : générés par `tools/build_geotrek_sources.py`, qui liste aussi les sources écartées pour raisons légales
 - `js/article.js` : récupération, nettoyage et mise en forme des articles
 - `js/speech.js` : écoute des articles (synthèse vocale du navigateur)
 - `js/store.js` : historique, favoris et réglages, sur l'appareil
@@ -33,4 +29,4 @@ Le classement utilise `data/types.json` plutôt que le service SPARQL de Wikidat
 
 ## Licences
 
-Textes de Wikipédia sous CC BY-SA 4.0, avec attribution affichée sous chaque article. Randonnées, restaurants et bars © contributeurs OpenStreetMap, licence ODbL, avec attribution affichée. Les données Geotrek restent la propriété de leurs structures : l'appli n'en stocke aucune copie publique et renvoie vers leurs fiches. Carte : Leaflet 1.9.4 sous licence BSD-2 (`vendor/leaflet/LICENSE.txt`), fonds de carte © contributeurs OpenStreetMap. Les serveurs de tuiles d'OpenStreetMap conviennent à un usage modéré : pour un déploiement à grande échelle, il faudra passer à un autre fournisseur. Police VT323 sous SIL OFL (`assets/OFL-vt323.txt`).
+Textes de Wikipédia sous CC BY-SA 4.0, avec attribution affichée sous chaque article. Carte : Leaflet 1.9.4 sous licence BSD-2 (`vendor/leaflet/LICENSE.txt`), fonds de carte © contributeurs OpenStreetMap. Les serveurs de tuiles d'OpenStreetMap conviennent à un usage modéré : pour un déploiement à grande échelle, il faudra passer à un autre fournisseur. Police VT323 sous SIL OFL (`assets/OFL-vt323.txt`).

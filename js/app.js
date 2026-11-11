@@ -1,6 +1,4 @@
 import { THEMES, VIEW_GROUPS, RADII_KM, discoverWithWidening, discoverPeople, closestInteresting, distanceKm, enrich, inTheme, isCity, loadViews, searchArticles } from './places.js';
-import { loadHikes } from './hikes.js';
-import { loadVenues } from './venues.js';
 import { MAX_ROUTE_STOPS, googleRouteUrl, loadLeaflet, pathKm, shortestOrder, TILE_URL, zoomForRadius } from './map.js';
 import { loadArticle, narrationChunks, wikiRoute } from './article.js';
 import { Narrator, speechSupported, voicesFor, preferredVoice, speakSample, onVoicesReady } from './speech.js';
@@ -17,9 +15,6 @@ const state = {
   step: '',
   area: null,
   usedRadiusKm: null,
-  hikes: null, // null | 'loading' | 'failed' | liste
-  venues: null, // null | 'loading' | 'failed' | liste
-  venueGroup: 'all', // all | restaurant | bar
   people: null,
   tab: 'histoire',
   sort: 'views', // views | near
@@ -63,8 +58,6 @@ export async function setCenter(center) {
   state.center = center;
   state.area = null;
   state.people = null;
-  state.hikes = null;
-  state.venues = null;
   state.placeViews = 'loading';
   state.peopleViews = 'loading';
   state.shown = PAGE_SIZE;
@@ -162,132 +155,16 @@ function loadingScreen(message) {
   return `<div class="screen-msg" role="status"><p class="pixel">${esc(message)}<span class="cursor" aria-hidden="true"></span></p></div>`;
 }
 
-// Les randonnées ne se chargent qu'à l'ouverture de l'onglet : la requête peut prendre près d'une minute.
-function startHikes() {
-  const requestId = state.requestId;
-  state.hikes = 'loading';
-  loadHikes(state.center)
-    .then((hikes) => { if (requestId === state.requestId) { state.hikes = hikes; renderIfHome(); } })
-    .catch(() => { if (requestId === state.requestId) { state.hikes = 'failed'; renderIfHome(); } });
-}
-
-function formatDuration(hours) {
-  const total = Math.round(hours * 60);
-  const minutes = total % 60;
-  return `${Math.floor(total / 60)} h${minutes ? ` ${String(minutes).padStart(2, '0')}` : ''}`;
-}
-
-function hikeCard(hike) {
-  const official = hike.kind === 'geotrek';
-  const facts = [
-    formatDistance(hike.lengthKm),
-    hike.durationHours ? formatDuration(hike.durationHours) : null,
-    hike.ascent ? `+${hike.ascent} m` : null,
-    hike.loop ? 'boucle' : null,
-    `${official ? 'départ' : 'sentier'} à ${formatDistance(hike.nearestKm)}`,
-  ].filter(Boolean).join(' · ');
-  const link = official ? hike.url : `https://www.openstreetmap.org/relation/${encodeURIComponent(hike.id)}`;
-  return `<li class="hike">
-    <span class="card-title">${esc(hike.name)}</span>
-    <span class="card-meta">${esc(facts)}</span>
-    <span class="views-note">Source : ${esc(official ? hike.sourceName : 'OpenStreetMap')}</span>
-    <span class="hike-actions">
-      <a class="key key-quiet key-small" target="_blank" rel="noopener noreferrer" href="${esc(link)}">${official ? 'FICHE OFFICIELLE' : 'VOIR LE TRACÉ'}</a>
-      <a class="key key-quiet key-small" target="_blank" rel="noopener noreferrer" href="https://www.google.com/maps/dir/?api=1&amp;destination=${hike.lat},${hike.lon}">Y ALLER</a>
-    </span>
-  </li>`;
-}
-
-function hikesPanel() {
-  if (state.hikes === null) startHikes();
-  if (state.hikes === 'loading') {
-    return `${loadingScreen('Recherche des randonnées')}<p class="views-note hike-wait">Cela peut prendre jusqu'à une minute.</p>`;
-  }
-  if (state.hikes === 'failed') {
-    return `<div class="screen-msg"><p>Le service de randonnées ne répond pas pour le moment.</p>
-      <button class="key" type="button" data-action="hikes-retry">RÉESSAYER</button></div>`;
-  }
-  if (!state.hikes.length) return '<p class="empty">Aucune randonnée balisée trouvée à moins de 30 km.</p>';
-  const hasOsm = state.hikes.some((hike) => hike.kind !== 'geotrek');
-  const osmCredit = hasOsm
-    ? ' Données OpenStreetMap © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">contributeurs OpenStreetMap</a>, licence ODbL. Pour ces itinéraires, « Y ALLER » mène au point du sentier le plus proche, pas forcément à son départ.'
-    : '';
-  return `<ul class="cards">${state.hikes.map(hikeCard).join('')}</ul>
-    <p class="legal hike-credit">Vérifiez le balisage et les conditions sur place.${osmCredit}</p>`;
-}
-
-// Même principe que les randonnées : le serveur est lent, on ne l'interroge qu'à l'ouverture de l'onglet.
-function startVenues() {
-  const requestId = state.requestId;
-  state.venues = 'loading';
-  loadVenues(state.center)
-    .then((venues) => { if (requestId === state.requestId) { state.venues = venues; renderIfHome(); } })
-    .catch(() => { if (requestId === state.requestId) { state.venues = 'failed'; renderIfHome(); } });
-}
-
-function venueReviewsUrl(venue) {
-  const place = venue.city ?? state.center.label ?? state.area?.placeName;
-  const query = [venue.name, venue.street, place].filter(Boolean).join(', ');
-  return `https://www.google.com/maps/search/?${new URLSearchParams({ api: 1, query })}`;
-}
-
-function venueCard(venue) {
-  const facts = [venue.label, venue.cuisine, `à ${formatDistance(venue.distanceKm)}`].filter(Boolean).join(' · ');
-  const website = venue.website
-    ? `<a class="key key-quiet key-small" target="_blank" rel="noopener noreferrer" href="${esc(venue.website)}">SITE</a>`
-    : '';
-  return `<li class="hike">
-    <span class="card-title">${esc(venue.name)}</span>
-    <span class="card-meta">${esc(facts)}</span>
-    ${venue.hours ? `<span class="views-note">${esc(venue.hours)}</span>` : ''}
-    <span class="hike-actions">
-      <a class="key key-quiet key-small" target="_blank" rel="noopener noreferrer" href="${esc(venueReviewsUrl(venue))}">VOIR LES AVIS</a>
-      ${website}
-      <a class="key key-quiet key-small" target="_blank" rel="noopener noreferrer" href="https://www.google.com/maps/dir/?api=1&amp;destination=${venue.lat},${venue.lon}">Y ALLER</a>
-    </span>
-  </li>`;
-}
-
-function venuesPanel() {
-  if (state.venues === null) startVenues();
-  if (state.venues === 'loading') {
-    return `${loadingScreen('Recherche des restaurants et bars')}<p class="views-note hike-wait">Cela peut prendre jusqu'à une minute.</p>`;
-  }
-  if (state.venues === 'failed') {
-    return `<div class="screen-msg"><p>Le service de recherche ne répond pas pour le moment.</p>
-      <button class="key" type="button" data-action="venues-retry">RÉESSAYER</button></div>`;
-  }
-  if (!state.venues.length) return '<p class="empty">Aucun restaurant ni bar référencé à moins de 20 km.</p>';
-  const items = state.venues.filter((venue) => state.venueGroup === 'all' || venue.group === state.venueGroup);
-  const filter = [['all', 'Tous'], ['restaurant', 'Restaurants'], ['bar', 'Bars et cafés']].map(([group, label]) => (
-    `<button type="button" data-action="venue-group" data-group="${group}" aria-pressed="${state.venueGroup === group}">${label}</button>`
-  )).join('');
-  const list = items.length ? `<ul class="cards">${items.slice(0, state.shown).map(venueCard).join('')}</ul>` : '<p class="empty">Rien dans cette catégorie à proximité.</p>';
-  return `<div class="sorter" role="group" aria-label="Type d'établissement">${filter}</div>${list}
-    ${items.length > state.shown ? '<button class="key key-wide" data-action="more" type="button">SUITE</button>' : ''}
-    <p class="legal hike-credit">Classés du plus proche au plus loin. Les horaires peuvent être anciens, vérifiez-les avant de vous déplacer. Données © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">contributeurs OpenStreetMap</a>, licence ODbL.</p>`;
-}
-
 function themeList() {
   const { places } = state.area;
   const people = state.people ?? [];
   const tabs = THEMES.map((theme) => {
     const pending = !state.people && (theme.id === 'personnes' || theme.id === 'culture');
-    const loaded = { randonnee: state.hikes, restaurants: state.venues }[theme.id];
-    const count = theme.id === 'randonnee' || theme.id === 'restaurants'
-      ? (Array.isArray(loaded) ? loaded.length : '')
-      : inTheme(theme.id, places, people).length;
+    const count = inTheme(theme.id, places, people).length;
     const selected = state.tab === theme.id;
     return `<button class="tab tab-${theme.id}" role="tab" type="button" aria-selected="${selected}" data-action="tab" data-tab="${theme.id}">
       ${esc(theme.label)} <span class="tab-count">${pending && theme.id === 'personnes' ? '…' : count}</span></button>`;
   }).join('');
-  if (state.tab === 'randonnee') {
-    return `<div class="tabs" role="tablist" aria-label="Thèmes">${tabs}</div><div class="tab-panel" role="tabpanel">${hikesPanel()}</div>`;
-  }
-  if (state.tab === 'restaurants') {
-    return `<div class="tabs" role="tablist" aria-label="Thèmes">${tabs}</div><div class="tab-panel" role="tabpanel">${venuesPanel()}</div>`;
-  }
-
   const isPeople = state.tab === 'personnes';
   const needed = isPeople ? [state.peopleViews] : state.tab === 'culture' ? [state.placeViews, state.peopleViews] : [state.placeViews];
   const viewsLoading = needed.includes('loading');
@@ -759,7 +636,7 @@ async function openRandom() {
 let mapInstance = null;
 let mapLayer = null;
 const mapPoints = new Map();
-const mapShown = { lieux: true, favoris: true, restaurants: false, randonnee: false };
+const mapShown = { lieux: true, favoris: true };
 let favoriteCoordsAsked = false;
 
 function closeMap() {
@@ -769,10 +646,8 @@ function closeMap() {
 }
 
 function mapLayerBar() {
-  const loading = (value) => (value === 'loading' ? '…' : '');
   const chips = [
     ['lieux', 'Lieux', state.status === 'loading' ? '…' : ''], ['favoris', 'Favoris', ''],
-    ['restaurants', 'Restaurants / Bars', loading(state.venues)], ['randonnee', 'Randonnées', loading(state.hikes)],
   ];
   return chips.map(([layer, label, hint]) => (
     `<button type="button" data-action="map-layer" data-layer="${layer}" aria-pressed="${mapShown[layer]}">${label}${hint}</button>`
@@ -822,7 +697,7 @@ async function renderMapView() {
   completeFavoriteCoords();
 }
 
-// Appelé quand les lieux, restaurants ou randonnées finissent de charger.
+// Appelé quand les lieux finissent de charger.
 function refreshMap() {
   if (!mapInstance) { renderMapView(); return; }
   const bar = document.getElementById('map-bar');
@@ -953,27 +828,6 @@ function drawMap() {
       const point = articlePoint(place);
       if (!theme || favoriteIds.has(point.id)) continue;
       add(point, dot(point, token(`--c-${theme.id}`)));
-    }
-  }
-  if (mapShown.restaurants && Array.isArray(state.venues)) {
-    for (const venue of state.venues) {
-      const point = {
-        id: `venue:${venue.id}`, kind: 'venue', name: venue.name, lat: venue.lat, lon: venue.lon,
-        meta: [venue.label, venue.cuisine].filter(Boolean).join(' · '),
-        links: [{ href: venueReviewsUrl(venue), label: 'AVIS' }],
-      };
-      add(point, dot(point, token('--c-restaurants'), 5));
-    }
-  }
-  if (mapShown.randonnee && Array.isArray(state.hikes)) {
-    for (const hike of state.hikes) {
-      const official = hike.kind === 'geotrek';
-      const point = {
-        id: `hike:${hike.id}`, kind: 'hike', name: hike.name, lat: hike.lat, lon: hike.lon,
-        meta: `${formatDistance(hike.lengthKm)}${hike.loop ? ' · boucle' : ''} · ${official ? 'départ' : 'point du sentier'}`,
-        links: [{ href: official ? hike.url : `https://www.openstreetmap.org/relation/${encodeURIComponent(hike.id)}`, label: official ? 'FICHE' : 'TRACÉ' }],
-      };
-      add(point, dot(point, token('--c-randonnee'), 8));
     }
   }
   if (mapShown.favoris) {
@@ -1206,8 +1060,6 @@ const actions = {
   'map-layer'(el) {
     const { layer } = el.dataset;
     mapShown[layer] = !mapShown[layer];
-    if (mapShown[layer] && layer === 'restaurants' && state.venues === null) startVenues();
-    if (mapShown[layer] && layer === 'randonnee' && state.hikes === null) startHikes();
     refreshMap();
   },
   'map-stop'(el) {
@@ -1243,9 +1095,6 @@ const actions = {
       .forEach((f) => store.toggleStop({ id: f.id, name: f.title, lat: f.lat, lon: f.lon }));
     itineraryChanged();
   },
-  'hikes-retry'() { state.hikes = null; renderHome(); },
-  'venues-retry'() { state.venues = null; renderHome(); },
-  'venue-group'(el) { state.venueGroup = el.dataset.group; state.shown = PAGE_SIZE; renderHome(); },
   'trip-create'() {
     const created = createTripFrom(document.getElementById('new-trip-name'));
     if (created) location.hash = `#/voyages/${created.id}`;
@@ -1360,7 +1209,7 @@ onVoicesReady(() => { if (currentRoute === '#/reglages') renderSettings(); });
 
 // Sur mobile, revenir dans l'appli ne recharge pas la page : une nouvelle publication passerait inaperçue.
 let loadedVersion = null;
-const APP_FILES = ['index.html', 'css/styles.css', 'js/app.js', 'js/api.js', 'js/article.js', 'js/hikes.js', 'js/map.js', 'js/overpass.js', 'js/places.js', 'js/speech.js', 'js/venues.js', 'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'js/store.js', 'data/types.json', 'data/geotrek-sources.json'];
+const APP_FILES = ['index.html', 'css/styles.css', 'js/app.js', 'js/api.js', 'js/article.js', 'js/map.js', 'js/places.js', 'js/speech.js', 'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'js/store.js', 'data/types.json'];
 
 async function publishedVersion() {
   try {
