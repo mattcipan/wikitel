@@ -867,6 +867,7 @@ function popupHtml(point) {
     : '';
   const links = point.links.map((link) => `<a class="key key-quiet key-small" href="${esc(link.href)}"${link.internal ? '' : ' target="_blank" rel="noopener noreferrer"'}>${link.label}</a>`).join('');
   return `<div class="map-popup">
+    ${point.thumb ? `<img class="map-popup-img" src="${esc(point.thumb)}" alt="" decoding="async">` : ''}
     <strong class="map-popup-title">${esc(point.name)}</strong>
     ${point.meta ? `<span class="map-popup-meta">${esc(point.meta)}</span>` : ''}
     <span class="map-popup-keys">
@@ -874,6 +875,23 @@ function popupHtml(point) {
       ${favorite}${links}
     </span>
   </div>`;
+}
+
+// La photo de l'article n'est demandée à Wikipédia qu'à l'ouverture de la bulle.
+function showPopupPhoto(point, popup) {
+  if (point.kind !== 'article' || point.thumb || point.photoChecked) return;
+  point.photoChecked = true;
+  const probe = { lang: point.lang, title: point.title };
+  enrich([probe]).then(() => {
+    if (!probe.thumb) return;
+    point.thumb = probe.thumb;
+    if (popup.isOpen()) popup.setContent(popupHtml(point));
+  }).catch(() => { point.photoChecked = false; });
+}
+
+function bindPointPopup(marker, point) {
+  return marker.bindPopup(() => popupHtml(point), { maxWidth: 280 })
+    .on('popupopen', (event) => showPopupPhoto(point, event.popup));
 }
 
 function drawMap() {
@@ -890,7 +908,7 @@ function drawMap() {
   const add = (point, marker) => {
     mapPoints.set(point.id, point);
     if (stopIds.has(point.id)) return; // Affiché plus bas, avec son numéro.
-    marker.bindPopup(() => popupHtml(point), { maxWidth: 280 }).addTo(mapLayer);
+    bindPointPopup(marker, point).addTo(mapLayer);
   };
   const dot = (point, color, radius = 7) => L.circleMarker([point.lat, point.lon], {
     radius, color: token('--ink'), weight: 1.5, fillColor: color, fillOpacity: 0.95,
@@ -945,9 +963,9 @@ function drawMap() {
     stops.forEach((stop, index) => {
       const point = mapPoints.get(stop.id) ?? { ...stop, kind: 'stop', meta: '', links: [] };
       mapPoints.set(stop.id, point);
-      L.marker([stop.lat, stop.lon], {
+      bindPointPopup(L.marker([stop.lat, stop.lon], {
         icon: L.divIcon({ className: 'map-stop', html: String(index + 1), iconSize: [30, 30] }), title: stop.name, zIndexOffset: 1000,
-      }).bindPopup(() => popupHtml(point), { maxWidth: 280 }).addTo(mapLayer);
+      }), point).addTo(mapLayer);
     });
   }
 }
